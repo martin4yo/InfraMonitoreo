@@ -1,0 +1,28 @@
+# pgBackRest — config del lado POSTGRES en dev-1 (repo host = db host, loopback).
+# Destino: /etc/pgbackrest/db.conf   (dueño postgres:postgres, chmod 640)
+#
+# Lo usa:
+#   - el archive_command de dev-1 (corre como postgres):
+#       archive_command = 'pgbackrest --config=/etc/pgbackrest/db.conf --stanza=dev-1 archive-push %p'
+#   - el lado pg del backup, vía pg1-host-config en la stanza [dev-1] del repo config.
+#
+# lock-path y log-path son PROPIOS porque los default (/tmp/pgbackrest y
+# /var/log/pgbackrest) pertenecen al usuario pgbackrest y postgres no puede usarlos.
+
+[global]
+repo1-host=127.0.0.1
+repo1-host-user=pgbackrest
+repo1-path=/backup/pgbackrest
+compress-type=lz4
+compress-level=3
+process-max=2
+archive-async=y
+spool-path=/var/spool/pgbackrest
+lock-path=/tmp/pgbackrest-db
+log-path=/var/log/pgbackrest-db
+log-level-console=info
+log-level-file=detail
+
+[dev-1]
+pg1-path=/var/lib/postgresql/14/main
+pg1-port=5432

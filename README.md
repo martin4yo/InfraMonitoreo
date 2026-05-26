@@ -83,16 +83,17 @@ $EDITOR inventory.sh
 ./scripts/30-deploy-pgbackrest-monitoring.sh   # colector + alarmas en los servers con pgBackRest
 ```
 
-### Instalar pgBackRest con repo central en dev-1 (TLS)
+### pgBackRest con repo central en dev-1 (SSH)
 
-Workstream aparte (toca PostgreSQL de prod). Runbook completo con rollout
-escalonado en [docs/pgbackrest-tls-setup.md](docs/pgbackrest-tls-setup.md):
-genera certificados (`scripts/pgbackrest/gen-certs.sh`), configura el repo host
-y los db hosts (`pgbackrest/repo-host/`, `pgbackrest/db-host/`) y programa backups.
+Los 4 servers respaldan a un repositorio central en dev-1 (`/backup/pgbackrest`) por
+**SSH**, con pgBackRest 2.58 unificado (repo PGDG). Arquitectura, confianza SSH, el caso
+loopback de dev-1 y los gotchas (puerto 2222 de clubix, `AllowUsers`, fail2ban) están en
+[docs/pgbackrest-setup.md](docs/pgbackrest-setup.md). Configs de referencia en
+`pgbackrest/repo-host/` y `pgbackrest/db-host/`.
 
 ## Documentación
 
 - [docs/setup-netdata-cloud.md](docs/setup-netdata-cloud.md): cuenta + `CLAIM_TOKEN`,
   notificaciones Telegram + Email, usuario read-only de PostgreSQL, `stub_status` en nginx.
-- [docs/pgbackrest-tls-setup.md](docs/pgbackrest-tls-setup.md): repositorio central
-  pgBackRest por TLS, paso a paso.
+- [docs/pgbackrest-setup.md](docs/pgbackrest-setup.md): repositorio central pgBackRest
+  por SSH (estado implementado), incluyendo el caso loopback de dev-1.
