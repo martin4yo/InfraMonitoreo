@@ -48,8 +48,9 @@ ENDPOINTS=(
 # Objetivo: pgBackRest en los 3 de prod + dev, todos pegando al repo en dev-1.
 # ─────────────────────────────────────────────────────────────────────────────
 PGBACKREST_SERVERS=("prod-1" "prod-2" "prod-3" "dev-1")
-PGBACKREST_USER="postgres"   # usuario dueño de pgBackRest en los servers
-PGBACKREST_REPO_HOST="dev-1" # server que aloja el repositorio central de backups
+PGBACKREST_USER="postgres"      # usuario dueño de pgBackRest en los db hosts
+PGBACKREST_REPO_HOST="dev-1"    # server que aloja el repositorio central de backups
+PGBACKREST_REPO_OWNER="pgbackrest"  # usuario OS dueño del repo (corre el colector de monitoreo)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Netdata Cloud — token y room (ver docs/setup-netdata-cloud.md).

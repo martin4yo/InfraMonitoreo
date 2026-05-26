@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """Recolecta el estado de pgBackRest y lo empuja a Netdata vía statsd (UDP).
 
-Pensado para correr por cron como el usuario dueño de pgBackRest (normalmente
-'postgres'). No escribe archivos ni necesita permisos especiales: solo manda
-3 gauges a Netdata en 127.0.0.1:8125.
+Corre por cron en el REPO HOST (dev-1) como el usuario dueño del repo (pgbackrest),
+que es quien ve TODAS las stanzas con `pgbackrest info`. No fuerza WAL switches: lee
+solo `info --output=json` (barato). La validación de archiving la hace el `check`
+semanal del cron de backups.
 
-Métricas:
-  pgbackrest.backup_age  -> segundos desde el último backup OK (de cualquier stanza)
-  pgbackrest.backup_ok   -> 1 si todas las stanzas reportan estado OK y hay backups; si no 0
-  pgbackrest.check_ok    -> 1 si 'pgbackrest check' pasa en todas las stanzas; si no 0
+Métricas (agregadas sobre todas las stanzas del repo):
+  pgbackrest.backup_age  -> segundos desde el último backup OK de la PEOR stanza
+                            (la más atrasada; así una stanza vieja no queda tapada
+                             por otra reciente)
+  pgbackrest.backup_ok   -> 1 si TODAS las stanzas están 'ok' y tienen al menos un
+                            backup; 0 si alguna falla o no tiene backups
 """
 import json
 import socket
@@ -18,6 +21,7 @@ import time
 
 STATSD_HOST = "127.0.0.1"
 STATSD_PORT = 8125
+NO_BACKUP_AGE = 99999999  # edad "infinita" para una stanza sin backups
 
 
 def run(cmd):
@@ -31,56 +35,46 @@ def send(metric, value):
 
 
 def collect():
-    last_epoch = 0
-    backup_ok = 0
-    check_ok = 0
+    """Devuelve (worst_age_segundos, backup_ok)."""
+    now = int(time.time())
 
     info = run(["pgbackrest", "info", "--output=json"])
     if info.returncode != 0 or not info.stdout.strip():
-        # pgbackrest no responde / sin stanzas: todo en falla
-        return last_epoch, backup_ok, check_ok
-
+        # pgbackrest no responde / sin stanzas: falla total
+        return NO_BACKUP_AGE, 0
     try:
         data = json.loads(info.stdout)
     except (ValueError, json.JSONDecodeError):
-        return last_epoch, backup_ok, check_ok
-
+        return NO_BACKUP_AGE, 0
     if not data:
-        return last_epoch, backup_ok, check_ok
+        return NO_BACKUP_AGE, 0
 
     all_ok = True
-    stanzas = []
+    worst_age = 0
     for stanza in data:
-        stanzas.append(stanza.get("name", ""))
-        # status.code == 0 significa "ok" en la salida de pgbackrest
+        # status.code == 0 significa "ok"
         if stanza.get("status", {}).get("code", 1) != 0:
             all_ok = False
-        for backup in stanza.get("backup", []):
-            stop = backup.get("timestamp", {}).get("stop", 0) or 0
-            if stop > last_epoch:
-                last_epoch = stop
+        backups = stanza.get("backup", [])
+        if not backups:
+            all_ok = False
+            worst_age = NO_BACKUP_AGE
+            continue
+        latest_stop = max(
+            (b.get("timestamp", {}).get("stop", 0) or 0) for b in backups
+        )
+        age = (now - latest_stop) if latest_stop > 0 else NO_BACKUP_AGE
+        worst_age = max(worst_age, age)
 
-    backup_ok = 1 if (all_ok and last_epoch > 0) else 0
-
-    # 'check' verifica archiving de WAL + acceso al repositorio (requiere stanza).
-    # Hace un switch de WAL de prueba, por eso no conviene correrlo muy seguido.
-    check_ok = 1
-    for st in [s for s in stanzas if s]:
-        r = run(["pgbackrest", f"--stanza={st}", "check"])
-        if r.returncode != 0:
-            check_ok = 0
-
-    return last_epoch, backup_ok, check_ok
+    backup_ok = 1 if (all_ok and worst_age < NO_BACKUP_AGE) else 0
+    return worst_age, backup_ok
 
 
 def main():
-    last_epoch, backup_ok, check_ok = collect()
-    now = int(time.time())
-    age = (now - last_epoch) if last_epoch > 0 else 99999999
+    worst_age, backup_ok = collect()
     try:
-        send("pgbackrest.backup_age", age)
+        send("pgbackrest.backup_age", worst_age)
         send("pgbackrest.backup_ok", backup_ok)
-        send("pgbackrest.check_ok", check_ok)
     except OSError as e:
         print(f"No se pudo enviar a statsd: {e}", file=sys.stderr)
         sys.exit(1)
