@@ -1,0 +1,77 @@
+# pgBackRest — config del REPO HOST (dev-1), el que aloja los backups de todos.
+# Destino: /etc/pgbackrest/pgbackrest.conf  en dev-1
+#
+# Reemplazá:
+#   <IP-prod-X>     IP de cada DB host de producción
+#   <PG_PATH_*>     data dir de PostgreSQL en cada server (ej. /var/lib/postgresql/16/main)
+#   <PASSPHRASE>    passphrase larga para cifrar el repositorio (guardala en lugar seguro)
+#
+# Hay un STANZA por cluster: prod-1, prod-2, prod-3 y dev-1 (este último local).
+
+[global]
+repo1-path=/var/lib/pgbackrest
+repo1-retention-full=2
+repo1-retention-diff=6
+# Cifrado del repositorio (los backups cruzan internet entre proveedores):
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass=<PASSPHRASE>
+# Empaquetado para repos remotos (menos archivos, más eficiente):
+repo1-bundle=y
+repo1-block=y
+start-fast=y
+log-level-console=info
+log-level-file=detail
+process-max=2
+
+# --- Servidor TLS (los DB hosts se conectan acá para archive-push / repo) ---
+tls-server-address=*
+tls-server-port=8432
+tls-server-cert-file=/etc/pgbackrest/cert/dev-1.crt
+tls-server-key-file=/etc/pgbackrest/cert/dev-1.key
+tls-server-ca-file=/etc/pgbackrest/cert/ca.crt
+# Autoriza el CN de cada DB host a operar SU stanza:
+tls-server-auth=prod-1=prod-1
+tls-server-auth=prod-2=prod-2
+tls-server-auth=prod-3=prod-3
+tls-server-auth=dev-1=dev-1
+
+# --- Stanza prod-1 (remoto por TLS) ---
+[prod-1]
+pg1-host=<IP-prod-1>
+pg1-host-type=tls
+pg1-host-port=8432
+pg1-host-cert-file=/etc/pgbackrest/cert/dev-1.crt
+pg1-host-key-file=/etc/pgbackrest/cert/dev-1.key
+pg1-host-ca-file=/etc/pgbackrest/cert/ca.crt
+pg1-host-user=postgres
+pg1-path=<PG_PATH_PROD1>
+pg1-port=5432
+
+# --- Stanza prod-2 (remoto por TLS) ---
+[prod-2]
+pg1-host=<IP-prod-2>
+pg1-host-type=tls
+pg1-host-port=8432
+pg1-host-cert-file=/etc/pgbackrest/cert/dev-1.crt
+pg1-host-key-file=/etc/pgbackrest/cert/dev-1.key
+pg1-host-ca-file=/etc/pgbackrest/cert/ca.crt
+pg1-host-user=postgres
+pg1-path=<PG_PATH_PROD2>
+pg1-port=5432
+
+# --- Stanza prod-3 (remoto por TLS) ---
+[prod-3]
+pg1-host=<IP-prod-3>
+pg1-host-type=tls
+pg1-host-port=8432
+pg1-host-cert-file=/etc/pgbackrest/cert/dev-1.crt
+pg1-host-key-file=/etc/pgbackrest/cert/dev-1.key
+pg1-host-ca-file=/etc/pgbackrest/cert/ca.crt
+pg1-host-user=postgres
+pg1-path=<PG_PATH_PROD3>
+pg1-port=5432
+
+# --- Stanza dev-1 (local: dev-1 es repo host Y db host) ---
+[dev-1]
+pg1-path=<PG_PATH_DEV1>
+pg1-port=5432

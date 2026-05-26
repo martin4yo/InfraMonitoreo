@@ -1,0 +1,13 @@
+# Inventario real con hosts/usuarios/IPs — NO versionar
+inventory.sh
+
+# Secretos (tokens de claim, credenciales)
+secrets.sh
+.env
+*.token
+
+# Certificados TLS de pgBackRest — SECRETOS, no versionar
+pgbackrest/certs/
+
+# Salidas locales
+*.log

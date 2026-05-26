@@ -1,0 +1,33 @@
+# pgBackRest — config de un DB HOST de producción (ej. prod-1).
+# Destino: /etc/pgbackrest/pgbackrest.conf  en cada server prod
+#
+# Hacé una copia por server reemplazando 'prod-1' por el nombre real (prod-2/prod-3)
+# y ajustando:
+#   <IP-dev-1>    IP del repo host (dev-1)
+#   <PG_PATH>     data dir de PostgreSQL en ESTE server
+#   prod-1        nombre del stanza = nombre del server (debe coincidir en repo host)
+
+[global]
+# --- Repo remoto en dev-1 vía TLS ---
+repo1-host=<IP-dev-1>
+repo1-host-type=tls
+repo1-host-port=8432
+repo1-host-cert-file=/etc/pgbackrest/cert/prod-1.crt
+repo1-host-key-file=/etc/pgbackrest/cert/prod-1.key
+repo1-host-ca-file=/etc/pgbackrest/cert/ca.crt
+repo1-host-user=postgres
+log-level-console=info
+log-level-file=detail
+
+# --- Servidor TLS local (el repo host se conecta acá para hacer el backup) ---
+tls-server-address=*
+tls-server-port=8432
+tls-server-cert-file=/etc/pgbackrest/cert/prod-1.crt
+tls-server-key-file=/etc/pgbackrest/cert/prod-1.key
+tls-server-ca-file=/etc/pgbackrest/cert/ca.crt
+# Autoriza al repo host (CN=dev-1) a operar este stanza:
+tls-server-auth=dev-1=prod-1
+
+[prod-1]
+pg1-path=<PG_PATH>
+pg1-port=5432
