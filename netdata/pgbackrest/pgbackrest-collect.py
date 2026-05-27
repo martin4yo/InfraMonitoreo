@@ -105,10 +105,17 @@ def collect():
     worst_age = 0
     for stanza in data:
         name = stanza.get("name", "unknown")
-        status_ok = stanza.get("status", {}).get("code", 1) == 0
+        # Multi-repo: el status agregado da 'mixed' (code 4) si repo2 está atrasado
+        # y 'running' (code 3) durante un backup; ninguno de esos es un fallo. La
+        # stanza está sana si AL MENOS UN repo está ok (code 0) y hay backup reciente.
+        repos = stanza.get("repo", [])
+        if repos:
+            any_repo_ok = any(r.get("status", {}).get("code", 1) == 0 for r in repos)
+        else:  # config viejo single-repo sin lista "repo"
+            any_repo_ok = stanza.get("status", {}).get("code", 1) == 0
         b_age = backup_age(stanza, now)
         w_age = wal_age(stanza, now)
-        st_ok = 1 if (status_ok and b_age < NO_BACKUP_AGE) else 0
+        st_ok = 1 if (any_repo_ok and b_age < NO_BACKUP_AGE) else 0
 
         send(f"pgbackrest.{name}.backup_age", b_age)
         send(f"pgbackrest.{name}.wal_age", w_age)

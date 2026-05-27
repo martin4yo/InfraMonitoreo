@@ -53,6 +53,16 @@ PGBACKREST_REPO_HOST="dev-1"    # server que aloja el repositorio central de bac
 PGBACKREST_REPO_OWNER="pgbackrest"  # usuario OS dueño del repo (corre el colector de monitoreo)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# OFFSITE a Cloudflare R2 (repo2, S3-compatible, cifrado). scripts/50-deploy-r2-offsite.sh
+# Las CREDENCIALES van en secrets.sh (gitignored), NO acá:
+#   R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+#   PGBACKREST_R2_CIPHER_PASS   (la passphrase es CRÍTICA: sin ella el offsite es irrecuperable)
+# Knobs opcionales (defaults sanos para R2):
+# ─────────────────────────────────────────────────────────────────────────────
+R2_REGION="${R2_REGION:-auto}"             # R2 usa 'auto'
+R2_REPO2_PATH="${R2_REPO2_PATH:-/pgbackrest}"  # prefijo dentro del bucket
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Netdata Cloud — token y room (ver docs/setup-netdata-cloud.md).
 # Mejor exportarlos desde secrets.sh (gitignored) en vez de hardcodearlos acá.
 # ─────────────────────────────────────────────────────────────────────────────
