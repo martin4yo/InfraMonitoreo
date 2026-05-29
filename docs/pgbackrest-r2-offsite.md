@@ -11,8 +11,11 @@ Desplegado con `scripts/50-deploy-r2-offsite.sh` (idempotente, por fases).
 - **repo2** = Cloudflare R2 (`s3`), **cifrado del lado cliente** (`aes-256-cbc`). Offsite/DR.
 - `archive-push` (corre en cada DB host) empuja **WAL a ambos repos**: repo1 por SSH→dev-1,
   repo2 directo por S3→R2. ⇒ **WAL offsite continuo (RPO ~1 min)**.
-- `backup --repo=2` corre en dev-1 (lee la DB por SSH, escribe a R2). Schedule: **full
-  semanal + diff diario** (el WAL continuo cubre el PITR entre backups; no hace falta incr en R2).
+- `backup --repo=2` corre en dev-1 (lee la DB por SSH, escribe a R2). Schedule: **espeja repo1**
+  → full (dom) + diff (lun-sáb) + incr (cada 4h), corrido **+1h** respecto a repo1 (full/diff 2→3am,
+  incr 6,10,14,18,22 → 7,11,15,19,23) para no leer la DB en simultáneo. `backup` sin `--repo` apunta
+  SOLO a repo1, por eso repo2 necesita sus propias líneas de cron; el `check` (dom 4am) y el monitor
+  horario del crontab de repo1 ya operan sobre todos los repos y cubren repo2 sin duplicar.
 - Retención repo2: `repo2-retention-full=4`, `repo2-retention-diff=7`.
 - **`repo2-bundle=y`**: agrupa los archivos chicos del backup en objetos de ~20 MB. Una DB con
   miles de relaciones genera decenas de miles de archivos diminutos; sin bundle cada uno es un

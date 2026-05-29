@@ -5,7 +5,8 @@
 #   - repo2 (S3=R2) se configura en el repo host (dev-1) Y en los 3 DB hosts.
 #   - archive-push (corre en los DB hosts) empuja WAL a repo1 (SSH→dev-1) y repo2 (R2).
 #   - backup --repo=2 corre en dev-1, lee la DB por SSH y escribe en R2.
-#   - WAL continuo a R2 ⇒ PITR offsite ~1 min; backups full(sem)+diff(diario) a R2.
+#   - WAL continuo a R2 ⇒ PITR offsite ~1 min. repo2 ESPEJA el schedule de repo1:
+#     full(dom)+diff(lun-sáb)+incr(c/4h), corrido 1h para no solapar la lectura de la DB.
 #
 # ORDEN (importante para no romper archiving):
 #   repo      -> config repo2 en dev-1 + stanza-create --repo=2  [GATE de credenciales]
@@ -132,19 +133,26 @@ phase_verify() {
 }
 
 phase_cron() {
-  log "FASE cron: backups a repo2 en dev-1 (full sem + diff diario; WAL ya es continuo)"
+  log "FASE cron: repo2 espeja el schedule de repo1 (full dom + diff lun-sáb + incr c/4h)"
   local rec; rec="$(server_record_by_name "$PGBACKREST_REPO_HOST")"; parse_server "$rec"
   local sudo; sudo="$(sudo_prefix "$S_USER")"
-  # Bloque idempotente (marcador). full dom + diff lun-sáb, escalonado, ventana 3:xx.
+  # Bloque idempotente (marcador). Espeja repo1 pero corrido +1h (full/diff 2->3am,
+  # incr 6,10,14,18,22 -> 7,11,15,19,23) para no leer la DB en simultáneo. Mismo
+  # escalonado de 15 min por stanza. El `check` (dom 4am) y el monitor horario del
+  # crontab de repo1 ya operan sobre TODOS los repos, así que no se duplican aquí.
   local block='# >>> inframonitoreo r2 offsite >>>
 0 3 * * 0   pgbackrest --stanza=AxiomaCloudProd --repo=2 --type=full backup
 0 3 * * 1-6 pgbackrest --stanza=AxiomaCloudProd --repo=2 --type=diff backup
+0 7,11,15,19,23 * * * pgbackrest --stanza=AxiomaCloudProd --repo=2 --type=incr backup
 15 3 * * 0   pgbackrest --stanza=clubix --repo=2 --type=full backup
 15 3 * * 1-6 pgbackrest --stanza=clubix --repo=2 --type=diff backup
+15 7,11,15,19,23 * * * pgbackrest --stanza=clubix --repo=2 --type=incr backup
 30 3 * * 0   pgbackrest --stanza=axiodemo --repo=2 --type=full backup
 30 3 * * 1-6 pgbackrest --stanza=axiodemo --repo=2 --type=diff backup
+30 7,11,15,19,23 * * * pgbackrest --stanza=axiodemo --repo=2 --type=incr backup
 45 3 * * 0   pgbackrest --stanza=dev-1 --repo=2 --type=full backup
 45 3 * * 1-6 pgbackrest --stanza=dev-1 --repo=2 --type=diff backup
+45 7,11,15,19,23 * * * pgbackrest --stanza=dev-1 --repo=2 --type=incr backup
 # <<< inframonitoreo r2 offsite <<<'
   ssh_run "$S_USER" "$S_HOST" "$S_PORT" "
     cur=\$(${sudo}-u ${PGBACKREST_REPO_OWNER} crontab -l 2>/dev/null || true)
