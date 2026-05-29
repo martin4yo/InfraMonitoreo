@@ -41,6 +41,7 @@ for rec in "${SERVERS[@]}"; do
     ["$NETDATA_DIR/go.d/nginx.conf"]="/etc/netdata/go.d/nginx.conf"
     ["$NETDATA_DIR/apps_groups.conf"]="/etc/netdata/apps_groups.conf"
     ["$NETDATA_DIR/health.d/apps_http.conf"]="/etc/netdata/health.d/apps_http.conf"
+    ["$NETDATA_DIR/health.d/inframonitoreo-tuning.conf"]="/etc/netdata/health.d/inframonitoreo-tuning.conf"
   )
   for local_f in "${!FILES[@]}"; do
     remote_f="${FILES[$local_f]}"
