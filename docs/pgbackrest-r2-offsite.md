@@ -14,6 +14,10 @@ Desplegado con `scripts/50-deploy-r2-offsite.sh` (idempotente, por fases).
 - `backup --repo=2` corre en dev-1 (lee la DB por SSH, escribe a R2). Schedule: **full
   semanal + diff diario** (el WAL continuo cubre el PITR entre backups; no hace falta incr en R2).
 - Retención repo2: `repo2-retention-full=4`, `repo2-retention-diff=7`.
+- **`repo2-bundle=y`**: agrupa los archivos chicos del backup en objetos de ~20 MB. Una DB con
+  miles de relaciones genera decenas de miles de archivos diminutos; sin bundle cada uno es un
+  PUT a R2 (operación Class A) y el full inicial tarda 1h+. Con bundle baja a decenas de objetos
+  ⇒ minutos. Sólo aplica a backups **nuevos**; los viejos no-bundle conviven sin problema.
 
 Config (idéntica en todos los hosts) inyectada en `[global]` entre marcadores
 `# >>> inframonitoreo r2 offsite >>>`. Endpoint: `<account_id>.r2.cloudflarestorage.com`,
@@ -68,4 +72,5 @@ Probar un restore real periódicamente (un backup no probado no es un backup).
 ## Costo R2
 
 Storage ~USD 0.015/GB-mes. **Sin cargos de egress** (ventaja de R2 para restores). Los datos
-son chicos (axioma ~128 MB de DB, lz4 + cifrado), así que el costo es marginal.
+son chicos (axioma ~128 MB de DB, lz4 + cifrado), así que el costo es marginal. `repo2-bundle=y`
+además recorta drásticamente las operaciones Class A (PUT), que es lo que R2 cobra aparte del storage.

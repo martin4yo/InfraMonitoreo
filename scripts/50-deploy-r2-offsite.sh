@@ -41,6 +41,10 @@ make_block() {
   cat >"$f" <<EOF
 repo2-type=s3
 repo2-path=${R2_REPO2_PATH}
+# bundle: agrupa archivos chicos en objetos de ~20MB -> baja de ~28k PUTs a decenas.
+# Clave para DBs con miles de relaciones; sin esto el full inicial a R2 tarda 1h+ vs
+# minutos. Aplica a backups nuevos (los viejos no-bundle conviven sin problema).
+repo2-bundle=y
 repo2-s3-bucket=${R2_BUCKET}
 repo2-s3-endpoint=${R2_ENDPOINT}
 repo2-s3-region=${R2_REGION}
