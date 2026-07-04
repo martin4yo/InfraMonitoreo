@@ -302,16 +302,26 @@ cd ~/Desarrollos/InfraMonitoreo
 echo "exit=$?"                            # 0 = todas PASS, 1 = alguna FAIL
 ```
 
-1. Si `exit=0` y el resumen dice `✓ DRILL EXITOSO`: registrar la corrida en la tabla de abajo (§8) como `PASS`.
-2. Si `exit=1`: NO marcar como exitoso. Leer el log en `/tmp/restore-drill-logs/drill-*.log`,
-   identificar la stanza y el criterio que falló (§6), diagnosticar con §9 (Troubleshooting), y
-   registrar como `FAIL` con la observación. El fallo del drill es una alerta de DR: el problema
+1. **Registro automático:** al terminar, el script agrega una fila por stanza a
+   `docs/drill-history.csv` (fecha, ejecutor, stanza, backup, repo, restore, wal_lag, resultado).
+   Es la traza objetiva versionada — **hacé `git commit` de ese archivo** después de cada corrida.
+2. Si `exit=0` y el resumen dice `✓ DRILL EXITOSO`: la fila queda como `PASS`. Commitear el CSV.
+3. Si `exit=1`: NO marcar como exitoso. La fila del CSV queda `FAIL`. Leer el log en
+   `/tmp/restore-drill-logs/drill-*.log`, identificar la stanza y el criterio que falló (§6),
+   diagnosticar con §9 (Troubleshooting). El fallo del drill es una alerta de DR: el problema
    está en el backup/WAL de producción, no en el drill.
-3. Si una máquina distinta corre el drill, ajustar los prerequisitos de §2 en ese host.
+4. La tabla narrativa de §8 es un **resumen curado** (hitos, primeras corridas, incidentes con
+   observaciones). No hace falta duplicar ahí cada corrida rutinaria — para eso está el CSV. Sí
+   agregá una fila a §8 cuando la corrida tenga algo digno de nota (un FAIL, un cambio de setup).
+5. Si una máquina distinta corre el drill, ajustar los prerequisitos de §2 en ese host.
 
 ---
 
 ## 8. Registro de drills
+
+**Traza completa (todas las corridas):** `docs/drill-history.csv`, actualizado automáticamente
+por el script. La tabla de abajo es un **resumen curado** con hitos, primeras corridas por stanza
+e incidentes con observaciones — no duplica cada corrida rutinaria del CSV.
 
 | Fecha | Ejecutor | Stanza | Backup usado | Repo | Restore | WAL lag | Tablas | Resultado |
 |---|---|---|---|---|---|---|---|---|

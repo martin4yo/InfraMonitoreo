@@ -28,6 +28,12 @@ LOG_DIR="/tmp/restore-drill-logs"
 PGBACKREST_CONF="${DRILL_BASE}/pgbackrest-local.conf"
 LOG_FILE="${LOG_DIR}/drill-$(date +%Y%m%d-%H%M%S).log"
 
+# Historial versionado: una fila por (corrida, stanza) que se commitea al repo.
+# Lo escribe el usuario que corre el script (dueño del repo), no postgres.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HISTORY_CSV="${REPO_DIR}/docs/drill-history.csv"
+DRILL_TS="$(date '+%Y-%m-%d %H:%M:%S')"
+
 PG14_BIN="/usr/lib/postgresql/14/bin"
 PG16_BIN="/usr/lib/postgresql/16/bin"
 
@@ -414,17 +420,32 @@ main() {
     header "RESUMEN"
     printf "%-20s %-38s %-10s %-10s %-12s %s\n" "Stanza" "Backup" "Restore" "Edad" "WAL lag" "Estado" | tee -a "$LOG_FILE"
     printf '%.0s─' {1..95} | tee -a "$LOG_FILE"; echo | tee -a "$LOG_FILE"
+
+    # Crear el CSV con su cabecera si no existe (versionado en el repo)
+    if [[ ! -f "$HISTORY_CSV" ]]; then
+        echo "fecha,ejecutor,stanza,backup,repo,restore,wal_lag,resultado" > "$HISTORY_CSV" 2>/dev/null || true
+    fi
+
     for stanza in "${stanzas[@]}"; do
         local res=${DRILL_RESULTS[$stanza]:-"no ejecutado"}
-        local backup elapsed age wal_lag status
+        local backup elapsed age wal_lag status result
         backup=$(  echo "$res" | grep -oP 'backup=\K\S+' || echo "-")
         elapsed=$( echo "$res" | grep -oP 'restore=\K\S+' || echo "-")
         age=$(     echo "$res" | grep -oP 'age=\K\S+' || echo "-")
         wal_lag=$( echo "$res" | grep -oP 'wal_lag=\K\S+' || echo "-")
         status=$(  echo "$res" | grep -oP 'STATUS=\K\S+' || echo "-")
         printf "%-20s %-38s %-10s %-10s %-12s %s\n" "$stanza" "$backup" "$elapsed" "$age" "$wal_lag" "$status" | tee -a "$LOG_FILE"
+
+        # Append al historial versionado. La stanza sin STATUS=OK cuenta como FAIL
+        # (no llegó a verificarse o falló algún criterio). El repo local se renumera
+        # a repo1 (R2), pero en el origen es el repo2 de dev-1 → lo etiquetamos "R2".
+        [[ "$status" == "OK" ]] && result="PASS" || result="FAIL"
+        echo "${DRILL_TS},${USER:-$(id -un)},${stanza},${backup},R2,${elapsed},${wal_lag},${result}" \
+            >> "$HISTORY_CSV" 2>/dev/null \
+            || warn "no se pudo escribir $HISTORY_CSV (¿permisos?)"
     done
     echo "" | tee -a "$LOG_FILE"
+    info "Historial actualizado: $HISTORY_CSV (recordá commitearlo)"
 
     if (( ${#FAILURES[@]} == 0 )); then
         echo -e "${GREEN}${BOLD}✓  DRILL EXITOSO — todas las stanzas OK${NC}\n" | tee -a "$LOG_FILE"
