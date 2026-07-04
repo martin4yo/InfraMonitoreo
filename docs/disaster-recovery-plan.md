@@ -361,4 +361,84 @@ Este DRP debe revisarse en las siguientes circunstancias:
 
 ---
 
-*Documento generado el 2026-05-29. Revisión trimestral obligatoria.*
+## Apéndice A — Bases de datos por stanza
+
+> **Inventario tomado el 2026-07-04.** Las bases cambian con el tiempo; este apéndice es una
+> referencia rápida para un incidente, no la fuente de verdad. Regenerarlo con el comando del
+> final antes de confiar en él para un restore selectivo.
+>
+> Recordá: `pgbackrest restore --stanza=<X>` trae **el cluster completo con TODAS estas bases
+> juntas**, no una sola. Para recuperar una base puntual: restaurar la stanza en un host aislado
+> → `pg_dump <base>` de ahí → `pg_restore` en el destino. Ver §2 (escenarios) y el Restore Drill
+> Procedure para los comandos.
+
+### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 13 bases
+
+| Base | Tamaño aprox. |
+|---|---|
+| clubix_db | 256 MB |
+| mini_db | 112 MB |
+| parse_db | 77 MB |
+| mediflow_db | 18 MB |
+| elore_db | 13 MB |
+| hub_db | 12 MB |
+| rendiciones_db | 12 MB |
+| axiomadocs | 11 MB |
+| chequescloud | 11 MB |
+| checkpoint_db | 10 MB |
+| evolution | 10 MB |
+| iasqlassistant_db | 10 MB |
+| core_db | 8.6 MB |
+
+### `clubix` — servidor **clubix** (179.43.123.248:2222, PG14) — 1 base
+
+| Base | Tamaño aprox. |
+|---|---|
+| clubix_db | 198 MB |
+
+### `axiodemo` — servidor **axiodemo** (170.78.73.245, PG16) — 2 bases
+
+| Base | Tamaño aprox. |
+|---|---|
+| axio_db | 8.9 MB |
+| axio_ml | 11 MB |
+
+### `dev-1` — servidor **dev-1** (149.50.148.198, PG14, repo host) — 16 bases
+
+| Base | Tamaño aprox. |
+|---|---|
+| clubix_db | 171 MB |
+| mini_db | 89 MB |
+| rojoplus_db | 68 MB |
+| parse_db | 28 MB |
+| mediflow_db | 20 MB |
+| axioma_erp | 17 MB |
+| hub_db | 17 MB |
+| elore_db | 14 MB |
+| axioma_metadata | 13 MB |
+| checkpoint_db | 13 MB |
+| axiomaweb_db | 12 MB |
+| tally_db | 12 MB |
+| core_db | 10 MB |
+| axiomadb | 9.8 MB |
+| fitness_db | 9.6 MB |
+| axio_db | 9.5 MB |
+
+> **Ojo:** `clubix_db` existe en 3 stanzas (axioma, clubix, dev-1) con tamaños distintos — son
+> instancias **diferentes**, no la misma base. En un restore de `clubix_db`, definir de qué stanza.
+
+### Cómo regenerar este inventario
+
+```bash
+for h in axioma clubix axiodemo dev-1; do
+  echo "===== $h ====="
+  ssh axiomacloud@$h "sudo -u postgres psql -tAc \
+    \"SELECT datname, pg_size_pretty(pg_database_size(datname)) \
+      FROM pg_database WHERE datistemplate=false AND datname NOT IN ('postgres') \
+      ORDER BY pg_database_size(datname) DESC;\""
+done
+```
+
+---
+
+*Documento generado el 2026-05-29. Revisión trimestral obligatoria. Apéndice A actualizado 2026-07-04.*
