@@ -343,17 +343,19 @@ Este DRP debe revisarse en las siguientes circunstancias:
 
 ### 7.2 Drill obligatorio
 
-**Frecuencia mínima:** 1 drill por trimestre por stanza productiva (AxiomaCloudProd, clubix). axiodemo puede usarse para drills más frecuentes sin riesgo.
+**Frecuencia mínima:** 1 drill **mensual** de las 3 stanzas productivas (AxiomaCloudProd, clubix, axiodemo), más un drill fuera de cadencia después de cualquier cambio de config de pgBackRest, versión de PostgreSQL o migración de repo. El drill es barato (~1 min/stanza), así que la cadencia mensual da confianza sin costo operativo real.
 
-**Referencia:** Seguir el Restore Drill Procedure para ejecutar el drill. El drill debe incluir al menos un restore desde repo1 y, una vez por año, un restore desde repo2 para validar el acceso a R2.
+**Ejecución:** manual (no automatizada) mediante `scripts/70-restore-drill.sh`, corrido en un host **distinto de dev-1** (que aloja el repo) y con los prerequisitos de la sección 2 del Restore Drill Procedure. No se automatiza por cron porque el host ejecutor (KEYSOFT-UBUNTU) no está siempre encendido; el script es auto-evaluante (`exit 0/1`) y su registro es esta tabla.
 
-**Duración esperada del drill:** 20–45 minutos por stanza.
+**Referencia:** Seguir el Restore Drill Procedure (§7 Cadencia, §8 Registro). El drill restaura desde R2 con WAL replay completo y valida frescura del WAL (umbral 30 min), no solo la recuperabilidad del último backup.
+
+**Duración esperada del drill:** ~1 minuto por stanza con el script automatizado (restore + WAL replay + verificación + limpieza).
 
 ### 7.3 Registro de drills e incidentes
 
 | Fecha | Tipo | Stanza | Escenario | Repo usado | RTO real | Resultado | Responsable |
 |---|---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — | — |
+| 2026-07-04 | Drill | axiodemo | Restore + WAL replay desde R2 en host != repo | R2 | ~1 min | PASS (WAL lag 0 min, 34 tablas) | martin4yo |
 
 > Completar esta tabla después de cada drill o incidente real. Incluir una fila por evento. Para incidentes reales, agregar también el post-mortem como documento separado referenciado desde aquí.
 

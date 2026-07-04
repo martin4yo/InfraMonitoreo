@@ -267,28 +267,64 @@ Si aparece `ERROR` o `WARN: archive_check`, investigar antes de continuar.
 
 | Síntoma | Acción |
 |---|---|
-| `pgbackrest restore` termina con `ERROR` | Ver sección 8. No marcar el drill como exitoso. |
+| `pgbackrest restore` termina con `ERROR` | Ver sección 9. No marcar el drill como exitoso. |
 | `pg_ctl start` falla | Revisar `pg.log` en el directorio de la stanza. |
-| `pg_is_in_recovery()` retorna `t` | WAL replay no terminó o promote falló. Ver sección 8.1. |
-| `pg_last_xact_replay_timestamp()` es NULL | No se aplicó WAL archive — `restore_command` no funcionó. Ver sección 8.2. |
+| `pg_is_in_recovery()` retorna `t` | WAL replay no terminó o promote falló. Ver sección 9.1. |
+| `pg_last_xact_replay_timestamp()` es NULL | No se aplicó WAL archive — `restore_command` no funcionó. Ver sección 9.2. |
 | `pg_last_xact_replay_timestamp()` tiene más de 30 min | WAL archive desactualizado — hay una brecha en el archivado. Investigar `archive_status` en producción. |
 | `\l` muestra solo bases del sistema | Restore incompleto o path incorrecto. |
 
 ---
 
-## 7. Registro de drills
+## 7. Cadencia y ejecución regular
+
+Este drill es un **chequeo manual recurrente**, no automatizado. La decisión y su fundamento:
+
+- **Cadencia acordada: mensual** (y siempre después de un cambio en la config de pgBackRest,
+  cambio de versión de PostgreSQL, o migración de repo). Un drill viejo no vale: valida el
+  estado del backup+WAL *al momento de correrlo*.
+- **No hay cron.** El ejecutor natural (`KEYSOFT-UBUNTU`) no está siempre encendido, así que un
+  cron generaría falsos "no corrió". El drill es rápido (~1 min/stanza) y auto-evaluante
+  (`exit 0/1` + resumen), por lo que correrlo a mano y registrarlo acá es suficiente.
+- **NO se corre en `dev-1`.** `dev-1` aloja el repositorio de backups. Un drill debe restaurar en
+  un host **distinto** del repo: es lo único que prueba el escenario real de desastre (perder el
+  host del repo) y evita colisiones con el PG/repo productivo. Correrlo en dev-1 invalidaría el
+  drill como prueba de DR.
+- **NO hace falta un agente** para esto: no hay nada que interpretar más allá del veredicto
+  binario que ya emite el script.
+
+### Cómo correr el chequeo regular
+
+```bash
+# En KEYSOFT-UBUNTU (o cualquier host != dev-1 con PG14/16 + pgbackrest 2.58 + sudo→postgres)
+cd ~/Desarrollos/InfraMonitoreo
+./scripts/70-restore-drill.sh            # las 3 stanzas de prod
+echo "exit=$?"                            # 0 = todas PASS, 1 = alguna FAIL
+```
+
+1. Si `exit=0` y el resumen dice `✓ DRILL EXITOSO`: registrar la corrida en la tabla de abajo (§8) como `PASS`.
+2. Si `exit=1`: NO marcar como exitoso. Leer el log en `/tmp/restore-drill-logs/drill-*.log`,
+   identificar la stanza y el criterio que falló (§6), diagnosticar con §9 (Troubleshooting), y
+   registrar como `FAIL` con la observación. El fallo del drill es una alerta de DR: el problema
+   está en el backup/WAL de producción, no en el drill.
+3. Si una máquina distinta corre el drill, ajustar los prerequisitos de §2 en ese host.
+
+---
+
+## 8. Registro de drills
 
 | Fecha | Ejecutor | Stanza | Backup usado | Repo | Restore | WAL lag | Tablas | Resultado |
 |---|---|---|---|---|---|---|---|---|
 | 2026-05-29 | martin4yo | axiodemo | 20260529-091303F_20260529-193004I | repo2 | 14s | 1 min | 33 | PASS |
+| 2026-07-04 | martin4yo | axiodemo | 20260628-033014F_20260704-153017I | R2 (repo1 local) | 15s | 0 min | 34 | PASS |
 
 **Resultados posibles:** `PASS` / `FAIL` / `PARCIAL` (especificar observaciones en el commit o ticket correspondiente).
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
-### 8.1 Instancia queda en recovery — no promueve
+### 9.1 Instancia queda en recovery — no promueve
 
 **Síntoma:** `pg_is_in_recovery()` retorna `t` después de varios minutos.
 
@@ -314,7 +350,7 @@ O promover manualmente si la instancia está corriendo:
 sudo -u postgres psql -h 127.0.0.1 -p <puerto> -c "SELECT pg_promote();"
 ```
 
-### 8.2 pg_last_xact_replay_timestamp() es NULL
+### 9.2 pg_last_xact_replay_timestamp() es NULL
 
 **Síntoma:** La instancia promovió pero el timestamp es NULL.
 
@@ -332,7 +368,7 @@ sudo -u postgres psql -h 127.0.0.1 -p <puerto> -c "SELECT pg_promote();"
    ```
    La línea `wal archive min/max` debe mostrar segmentos más allá del stop WAL del último backup.
 
-### 8.3 Cipher mismatch
+### 9.3 Cipher mismatch
 
 **Síntoma:**
 ```
@@ -343,7 +379,7 @@ ERROR: [055]: cipher header invalid
 
 **Acción:** Verificar el valor en dev-1 contra el vault. No modificar la clave — todos los backups anteriores quedarían irrecuperables.
 
-### 8.4 Lock file / postmaster.pid existente
+### 9.4 Lock file / postmaster.pid existente
 
 **Síntoma:**
 ```
@@ -357,7 +393,7 @@ sudo -u postgres /usr/lib/postgresql/<ver>/bin/pg_ctl \
 sudo -u postgres rm -f /var/lib/postgresql/restore-drill/<stanza>/pgdata/postmaster.pid
 ```
 
-### 8.5 Error de permisos en el directorio destino
+### 9.5 Error de permisos en el directorio destino
 
 **Síntoma:**
 ```
@@ -370,7 +406,7 @@ sudo chown -R postgres:postgres /var/lib/postgresql/restore-drill/<stanza>
 sudo -u postgres chmod 700 /var/lib/postgresql/restore-drill/<stanza>/pgdata
 ```
 
-### 8.6 pg_ctl — versión incorrecta del binario
+### 9.6 pg_ctl — versión incorrecta del binario
 
 **Síntoma:** `pg_ctl: invalid data directory` o error de versión de catálogo en el log.
 

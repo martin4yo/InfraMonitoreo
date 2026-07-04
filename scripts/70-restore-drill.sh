@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# Restore drill desde repo2 (Cloudflare R2) en esta máquina local.
-# Restaura cada stanza en un directorio temporal aislado bajo /tmp/restore-drill,
-# arranca una instancia PG efímera en un puerto libre, verifica integridad y limpia.
-# Requiere: pgbackrest 2.58, pg14+pg16 binaries, sudo martin→postgres sin password.
+# Restore drill de los backups en Cloudflare R2, corrido en esta máquina local.
+# Restaura cada stanza en un directorio temporal aislado bajo $DRILL_BASE, arranca
+# una instancia PG efímera en un puerto libre, verifica integridad y limpia.
+#
+# Sobre repo1 vs repo2: en dev-1, R2 es el repo2 (el repo1 es SSH local). Acá el R2
+# es el ÚNICO repo, así que la conf local lo renumera a repo1 (pgbackrest exige que
+# el primer repo sea repo1). Por eso fetch_r2_credentials lee las claves 'repo2-*'
+# de dev-1 pero write_local_conf las emite como 'repo1-*'. No es un error.
+#
+# Alcance: solo las 3 stanzas de PROD (dev-1 no entra en el drill). Ver ALL_STANZAS.
+#
+# Requiere: pgbackrest 2.58, pg14+pg16 binaries, sudo local→postgres sin password,
+#           y SSH+sudo a dev-1 para leer las credenciales R2.
 #
 # Uso:
-#   ./70-restore-drill.sh                        # las 3 stanzas
+#   ./70-restore-drill.sh                        # las 3 stanzas de prod
 #   ./70-restore-drill.sh AxiomaCloudProd        # solo una
 #   ./70-restore-drill.sh clubix axiodemo        # subset
 
@@ -65,12 +74,18 @@ fetch_r2_credentials() {
     local conf
     conf=$(ssh "$DEV1_SSH" "sudo cat /etc/pgbackrest/pgbackrest.conf")
 
-    R2_BUCKET=$(   echo "$conf" | grep 'repo2-s3-bucket='     | cut -d= -f2 | tr -d ' ')
-    R2_ENDPOINT=$( echo "$conf" | grep 'repo2-s3-endpoint='   | cut -d= -f2 | tr -d ' ')
-    R2_REGION=$(   echo "$conf" | grep 'repo2-s3-region='     | cut -d= -f2 | tr -d ' ')
-    R2_KEY=$(      echo "$conf" | grep 'repo2-s3-key='        | cut -d= -f2 | tr -d ' ')
-    R2_SECRET=$(   echo "$conf" | grep 'repo2-s3-key-secret=' | cut -d= -f2 | tr -d ' ')
-    R2_CIPHER=$(   echo "$conf" | grep 'repo2-cipher-pass='   | cut -d= -f2-)
+    # Extrae el valor de una clave 'clave=valor' de la conf, tolerando espacios
+    # alrededor del '=' y recortando espacios al inicio/fin del valor. Ancla la
+    # clave al comienzo de línea para no confundir repo2-s3-key con repo2-s3-key-secret.
+    conf_val() {
+        echo "$conf" | sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p" | head -n1
+    }
+    R2_BUCKET=$(   conf_val 'repo2-s3-bucket')
+    R2_ENDPOINT=$( conf_val 'repo2-s3-endpoint')
+    R2_REGION=$(   conf_val 'repo2-s3-region')
+    R2_KEY=$(      conf_val 'repo2-s3-key')
+    R2_SECRET=$(   conf_val 'repo2-s3-key-secret')
+    R2_CIPHER=$(   conf_val 'repo2-cipher-pass')
 
     [[ -z "$R2_BUCKET" || -z "$R2_SECRET" || -z "$R2_CIPHER" ]] && {
         echo "ERROR: no se pudieron leer las credenciales R2 desde dev-1" >&2; exit 1
@@ -216,8 +231,16 @@ PGEOF
     sudo_pg bash -c "rm -f '${pgdata}/standby.signal' && touch '${pgdata}/recovery.signal'"
 
     # El WAL replay desde R2 puede tardar varios minutos; timeout generoso.
+    # Capturamos el exit de pg_ctl (no el de tee) via PIPESTATUS para no seguir
+    # a la verificación con una instancia que nunca arrancó.
     sudo_pg "/usr/lib/postgresql/${pgver}/bin/pg_ctl" \
         start -D "$pgdata" -l "$pglog" -w -t 300 2>&1 | tee -a "$LOG_FILE"
+    if (( ${PIPESTATUS[0]} != 0 )); then
+        fail "${stanza}: pg_ctl start falló — PG no arrancó"
+        info "Últimas líneas de ${pglog}:"
+        sudo_pg tail -n 20 "$pglog" 2>/dev/null | tee -a "$LOG_FILE" || true
+        return 1
+    fi
 
     ok "Instancia PG${pgver} arrancada en puerto ${port} (aplicando WAL archive...)"
 }
@@ -270,6 +293,7 @@ verify_stanza() {
     now_epoch=$(date +%s)
     if [[ -n "$last_xact_epoch" && "$last_xact_epoch" -gt 0 ]]; then
         wal_lag_min=$(( (now_epoch - last_xact_epoch) / 60 ))
+        (( wal_lag_min < 0 )) && wal_lag_min=0   # skew de reloj → no negativo
         if (( wal_lag_min <= 30 )); then
             ok "Último xact reproducido hace ${wal_lag_min} min — WAL archive FRESCO"
             DRILL_RESULTS[$stanza]+=" wal_lag=${wal_lag_min}m"
@@ -325,6 +349,10 @@ print(b[-1]['timestamp']['stop'] if b else 0)
 
     now_epoch=$(date +%s)
     age_h=$(( (now_epoch - stop_epoch) / 3600 ))
+    # Piso en 0: si el reloj local va atrás del server, stop puede quedar en el
+    # "futuro" y dar edad negativa, que pasaría el umbral <=25 sin ser realmente
+    # fresco. Un backup con timestamp futuro es anómalo → lo tratamos como 0h.
+    (( age_h < 0 )) && age_h=0
 
     if (( age_h <= 25 )); then
         ok "Backup tiene ${age_h}h de antigüedad — AL DÍA"
