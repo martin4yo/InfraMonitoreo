@@ -372,23 +372,28 @@ Este DRP debe revisarse en las siguientes circunstancias:
 > → `pg_dump <base>` de ahí → `pg_restore` en el destino. Ver §2 (escenarios) y el Restore Drill
 > Procedure para los comandos.
 
-### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 13 bases
+### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 12 bases
 
 | Base | Tamaño aprox. |
 |---|---|
-| clubix_db | 256 MB |
-| mini_db | 112 MB |
+| mini_db | 113 MB |
 | parse_db | 77 MB |
 | mediflow_db | 18 MB |
 | elore_db | 13 MB |
-| hub_db | 12 MB |
 | rendiciones_db | 12 MB |
+| hub_db | 12 MB |
 | axiomadocs | 11 MB |
 | chequescloud | 11 MB |
+| iasqlassistant_db | 10 MB |
 | checkpoint_db | 10 MB |
 | evolution | 10 MB |
-| iasqlassistant_db | 10 MB |
 | core_db | 8.6 MB |
+
+> **Nota (2026-07-04):** se decomisionó `clubix_db` de axioma — era una instancia zombi (app PM2
+> sin tráfico real + base congelada al 22-may, subconjunto viejo del clubix de producción). Se paró
+> la app, se quitó el vhost nginx y se hizo `DROP DATABASE` (respaldo en
+> `/var/lib/postgresql/clubix_db-axioma-decom-20260704-171526.dump` en axioma). La producción de
+> clubix vive en el server **clubix**.
 
 ### `clubix` — servidor **clubix** (179.43.123.248:2222, PG14) — 1 base
 
@@ -424,8 +429,10 @@ Este DRP debe revisarse en las siguientes circunstancias:
 | fitness_db | 9.6 MB |
 | axio_db | 9.5 MB |
 
-> **Ojo:** `clubix_db` existe en 3 stanzas (axioma, clubix, dev-1) con tamaños distintos — son
-> instancias **diferentes**, no la misma base. En un restore de `clubix_db`, definir de qué stanza.
+> **Ojo:** `clubix_db` existe en 2 stanzas (clubix y dev-1) con tamaños distintos — son instancias
+> **diferentes**, no la misma base. La de **clubix** es la producción real (dominio `clubix.com.ar`);
+> la de dev-1 es una copia. En un restore de `clubix_db`, definir de qué stanza. (Antes también
+> existía en axioma; decomisionada el 2026-07-04 — ver nota arriba.)
 
 ### Cómo regenerar este inventario
 
