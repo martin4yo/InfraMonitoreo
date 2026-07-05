@@ -96,6 +96,10 @@ proyecto aparte. Los `docker-compose.yml` que quedaron en algunos repos son rest
 
 ## 3. Estándar de despliegue objetivo
 
+> **Formalizado en la Fase 2 como documento oficial:** [`estandar-despliegue.md`](./estandar-despliegue.md) v1
+> (con plantillas de ecosystem/systemd/nginx y checklist de conformidad). El resumen de abajo se
+> mantiene como contexto del plan; la versión normativa es ese documento.
+
 Toda app propia converge a esta convención, sin excepción:
 
 ```
@@ -273,4 +277,15 @@ ventana. No hay downtime prolongado en ninguna app propia.
 - [x] Se arranca por **Fase 0** (cerrar inventario, solo lectura). ✅ **cerrada 2026-07-04**
 - [x] App piloto para la Fase 4: **mini**. ✅
 
+### Decisiones de la Fase 2 (2026-07-05)
+
+- [x] Estándar oficial publicado: [`estandar-despliegue.md`](./estandar-despliegue.md) **v1** (normativo). ✅
+- [x] **Layout de código**: el estándar exige layout **declarado en el manifiesto**, no un nombre de
+  carpeta fijo. `frontend/dist` es el default para apps nuevas; apps existentes (clubix:
+  `server/`+`client/dist`) son conformes declarando `BACKEND_DIR`/`FRONTEND_DIST`/`UPLOADS_DIR` —
+  **no se renombra en disco** (evita tocar ecosystem + vhosts + rutas + uploads sin beneficio). ✅
+- [x] **Nombre de proceso PM2**: `<app>`, o `<app>-backend`/`<app>-web` para apps con varios
+  procesos (clubix ya usa `clubix-backend`) — no se renombran procesos existentes. ✅
+
 *Plan aprobado — 2026-07-04. Ejecución por fase, una app a la vez, con backup y rollback.*
+*Fase 2 cerrada — 2026-07-05.*

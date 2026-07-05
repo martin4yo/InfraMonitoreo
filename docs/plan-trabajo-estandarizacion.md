@@ -13,7 +13,7 @@
 |---|---|---|---|
 | 0 | Cerrar inventario | Nulo (solo lectura) | [x] hecho (2026-07-04) |
 | 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [x] hecho (2026-07-05) |
-| 2 | Documento del estándar | Nulo | [ ] |
+| 2 | Documento del estándar | Nulo | [x] hecho (2026-07-05) |
 | 3 | Secretos SOPS+age | Nulo (no toca servers) | [ ] |
 | 4 | Migración piloto (mini) | Medio | [ ] |
 | 5 | Migración del resto | Medio | [ ] |
@@ -98,9 +98,9 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 
 ## Fase 2 — Documento del estándar (aprobación)
 
-- [ ] Formalizar el §3 como estándar oficial (convención de usuario, paths, ecosystem, systemd, nginx, TLS, DB)
-- [ ] Revisión y OK explícito antes de migrar cualquier app viva
-- [ ] Publicar el estándar como referencia versionada en `docs/`
+- [x] Formalizar el §3 como estándar oficial (convención de usuario, paths, ecosystem, systemd, nginx, TLS, DB) → [`estandar-despliegue.md`](./estandar-despliegue.md) v1
+- [x] Revisión y OK explícito antes de migrar cualquier app viva (aprobado 2026-07-05)
+- [x] Publicar el estándar como referencia versionada en `docs/` (con plantillas y checklist de conformidad)
 
 ---
 
@@ -265,3 +265,5 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 | 2026-07-04 | 0 | Relevamiento in-situ de los 3 servers (PM2, puertos, git, nginx, DBs, Node, ollama) | ✅ inventario §2 cerrado; 5 hallazgos que ajustan fases 1/4/5/6/7 |
 | 2026-07-05 | 1 · AxiomaWeb | Backup (git+tar 100M) → quitar vhost + reload → borrar cert → mover dir a backup | ✅ baja completa (sin DB) |
 | 2026-07-05 | 1 · rendiciones | Backup (git+tar 459M) + pg_dump DB (178K) → mover dir → DROP rendiciones_db | ✅ baja completa (DB eliminada, dump intacto) |
+| 2026-07-05 | 2 | Formalizar el estándar como `estandar-despliegue.md` v1 (nombres, usuario, dirs, ecosystem, systemd, .env/SOPS, nginx, TLS, DB, hooks, checklist + línea base de conformidad) | ✅ aprobado y cerrado |
+| 2026-07-05 | 2 · clubix | Decisión de layout: server/+client/dist se declara en manifiesto (no se renombra); PM2 admite `<app>-backend`/`<app>-web` | ✅ clubix conforme sin tocar el server |
