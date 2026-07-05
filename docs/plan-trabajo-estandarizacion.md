@@ -14,7 +14,7 @@
 | 0 | Cerrar inventario | Nulo (solo lectura) | [x] hecho (2026-07-04) |
 | 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [x] hecho (2026-07-05) |
 | 2 | Documento del estándar | Nulo | [x] hecho (2026-07-05) |
-| 3 | Secretos SOPS+age | Nulo (no toca servers) | [~] 15 .env cifrados + verificados (2026-07-05) — falta push al remote + confirmar custodia clave |
+| 3 | Secretos SOPS+age | Nulo (no toca servers) | [x] hecho (2026-07-05) |
 | 4 | Migración piloto (mini) | Medio | [ ] |
 | 5 | Migración del resto | Medio | [ ] |
 | 6 | Hooks especiales + tercero | Medio | [ ] |
@@ -119,8 +119,8 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
   - [~] axioma-corporate · checkpoint → **estáticos, sin `.env` de app**; se confirma al migrarlos (Fase 5)
 - [x] Verificar descifrado en máquina limpia (roundtrip con solo la clave age): **15/15 OK**
 - [x] Documentar el procedimiento de descifrado para el redespliegue (`infra-secrets/README.md`)
-- [ ] **Definir remote git privado y `git push`** (repo local hoy — falta decidir nombre/host)
-- [ ] **Confirmar clave age guardada en el gestor de contraseñas** (custodia fuera de banda)
+- [x] **Remote git privado + `git push`** → `martin4yo/infra-secrets` (GitHub, isPrivate=true)
+- [x] **Clave age guardada en el gestor de contraseñas** (custodia fuera de banda confirmada por el usuario)
 
 ---
 
@@ -264,3 +264,4 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 | 2026-07-05 | 2 · clubix | Decisión de layout: server/+client/dist se declara en manifiesto (no se renombra); PM2 admite `<app>-backend`/`<app>-web` | ✅ clubix conforme sin tocar el server |
 | 2026-07-05 | 3 | Instalar age/sops (local) + generar clave age + repo `infra-secrets` con `.sops.yaml` (cifrado por-valor) | ✅ tooling y repo listos; clave age generada (custodia a confirmar) |
 | 2026-07-05 | 3 | Traer y cifrar 15 `.env` de los 3 servers (sudo para los chmod 600) + README de descifrado | ✅ commit `970e2ee`; roundtrip máquina limpia 15/15 |
+| 2026-07-05 | 3 | Crear repo privado `martin4yo/infra-secrets` + push; clave age custodiada en gestor | ✅ Fase 3 cerrada (isPrivate=true) |
