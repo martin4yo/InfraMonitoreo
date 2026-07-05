@@ -14,7 +14,7 @@
 | 0 | Cerrar inventario | Nulo (solo lectura) | [x] hecho (2026-07-04) |
 | 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [x] hecho (2026-07-05) |
 | 2 | Documento del estándar | Nulo | [x] hecho (2026-07-05) |
-| 3 | Secretos SOPS+age | Nulo (no toca servers) | [ ] |
+| 3 | Secretos SOPS+age | Nulo (no toca servers) | [~] 15 .env cifrados + verificados (2026-07-05) — falta push al remote + confirmar custodia clave |
 | 4 | Migración piloto (mini) | Medio | [ ] |
 | 5 | Migración del resto | Medio | [ ] |
 | 6 | Hooks especiales + tercero | Medio | [ ] |
@@ -108,24 +108,19 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 
 > No cambia nada en los servers — solo respalda secretos cifrados. Va **antes** de toda migración.
 
-- [ ] Instalar `sops` + `age` en la máquina de trabajo
-- [ ] Generar clave age; custodia **fuera de banda** (gestor de contraseñas)
-- [ ] Crear repo git privado de secrets (o subcarpeta cifrada) con `.sops.yaml`
-- [ ] Definir regla SOPS (cifrado por-valor de los `.env`)
-- [ ] Cifrar y commitear el `.env` de cada app viva:
-  - [ ] axioma-corporate
-  - [ ] checkpoint
-  - [ ] elore
-  - [ ] hub
-  - [ ] mediflow
-  - [ ] mini
-  - [ ] parse
-  - [ ] clubix
-  - [ ] axio (backend)
-  - [ ] axio-ml (venv/config si aplica)
-  - [ ] evolution-api (tercero — su `.env` también respaldado)
-- [ ] Verificar descifrado en máquina limpia (roundtrip con la clave age)
-- [ ] Documentar el procedimiento de descifrado para el redespliegue
+- [x] Instalar `sops` + `age` en la máquina de trabajo (`~/.local/bin`: age v1.3.1, sops 3.13.2)
+- [x] Generar clave age (`~/.config/sops/age/keys.txt`, chmod 600) — **custodia fuera de banda pendiente de confirmar por el usuario**
+- [x] Crear repo git privado de secrets `~/Desarrollos/infra-secrets` con `.sops.yaml` (recipient = clave age pública)
+- [x] Definir regla SOPS (cifrado **por-valor** vía `encrypted_regex`, las claves quedan legibles)
+- [x] Cifrar y commitear el `.env` de cada app viva → **15 `.env` cifrados** (commit `970e2ee`):
+  - [x] elore · evolution-api (tercero, respaldado) · hub (backend+frontend) · mediflow (backend)
+  - [x] mini (backend+frontend+print-agent) · parse (backend+frontend) · clubix (server/.env)
+  - [x] axio (raíz+backend) · axio-ml (`/opt/axio-ml-service`) · **axio-db-agent** (`/opt`, nuevo hallazgo)
+  - [~] axioma-corporate · checkpoint → **estáticos, sin `.env` de app**; se confirma al migrarlos (Fase 5)
+- [x] Verificar descifrado en máquina limpia (roundtrip con solo la clave age): **15/15 OK**
+- [x] Documentar el procedimiento de descifrado para el redespliegue (`infra-secrets/README.md`)
+- [ ] **Definir remote git privado y `git push`** (repo local hoy — falta decidir nombre/host)
+- [ ] **Confirmar clave age guardada en el gestor de contraseñas** (custodia fuera de banda)
 
 ---
 
@@ -267,3 +262,5 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 | 2026-07-05 | 1 · rendiciones | Backup (git+tar 459M) + pg_dump DB (178K) → mover dir → DROP rendiciones_db | ✅ baja completa (DB eliminada, dump intacto) |
 | 2026-07-05 | 2 | Formalizar el estándar como `estandar-despliegue.md` v1 (nombres, usuario, dirs, ecosystem, systemd, .env/SOPS, nginx, TLS, DB, hooks, checklist + línea base de conformidad) | ✅ aprobado y cerrado |
 | 2026-07-05 | 2 · clubix | Decisión de layout: server/+client/dist se declara en manifiesto (no se renombra); PM2 admite `<app>-backend`/`<app>-web` | ✅ clubix conforme sin tocar el server |
+| 2026-07-05 | 3 | Instalar age/sops (local) + generar clave age + repo `infra-secrets` con `.sops.yaml` (cifrado por-valor) | ✅ tooling y repo listos; clave age generada (custodia a confirmar) |
+| 2026-07-05 | 3 | Traer y cifrar 15 `.env` de los 3 servers (sudo para los chmod 600) + README de descifrado | ✅ commit `970e2ee`; roundtrip máquina limpia 15/15 |
