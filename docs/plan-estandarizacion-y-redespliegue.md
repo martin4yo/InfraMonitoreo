@@ -29,9 +29,9 @@ proyecto aparte. Los `docker-compose.yml` que quedaron en algunos repos son rest
 | Servidor | App | Owner hoy | Puerto | Base de datos | Repo git | Node | Estado |
 |---|---|---|---|---|---|---|---|
 | axioma | axioma-corporate | 🟡 estático + backend root | 3005 (prd) + estático (default) | axiomadocs | rodrigomnaranjo/axioma-corporate | 20 | migrar (frontend estático + backend node en 3005) |
-| axioma | **AxiomaWeb** | 🔴 root | 3150 | — | martin4yo/AxiomaWeb | 20 | **DAR DE BAJA** (vhost axiomaweb.axiomacloud.com) |
+| axioma | ~~**AxiomaWeb**~~ | — | ~~3150~~ | — | martin4yo/AxiomaWeb | — | ✅ **DADA DE BAJA 2026-07-05** (backup en /var/backups) |
 | axioma | checkpoint | 🟡 estático (nginx `root`) | — (estático) | checkpoint_db (¿en uso?) | AxiomaCloud/checkpointsite | — | **NO es app root** — sitio estático servido por nginx |
-| axioma | **rendiciones** | 🔴 root | 5050 | rendiciones_db | martin4yo/Rendiciones | 20 | **DAR DE BAJA** |
+| axioma | ~~**rendiciones**~~ | — | ~~5050~~ | ~~rendiciones_db~~ | martin4yo/Rendiciones | — | ✅ **DADA DE BAJA 2026-07-05** (DB dumpeada + DROP; backup en /var/backups) |
 | axioma | elore | eloreapp | 3700 | elore_db | (repo local — remote no configurado) | 20 | menor · Next.js · elore.com.ar · **ecosystem.config.js ✅** |
 | axioma | evolution-api | evolutionapp | 8080 | evolution | EvolutionAPI/evolution-api | 20 | **TERCERO → setup separado** · tsx/TypeScript · evolution.axiomacloud.com |
 | axioma | hub | hubapp | 5200 (back) + 8089 (front) | hub_db | (repo local — remote no configurado) | 20 | revisar · back `dist/server.js` + front Next · **ecosystem.config.js ✅** |

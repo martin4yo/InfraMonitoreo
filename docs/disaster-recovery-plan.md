@@ -372,7 +372,7 @@ Este DRP debe revisarse en las siguientes circunstancias:
 > → `pg_dump <base>` de ahí → `pg_restore` en el destino. Ver §2 (escenarios) y el Restore Drill
 > Procedure para los comandos.
 
-### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 12 bases
+### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 11 bases
 
 | Base | Tamaño aprox. |
 |---|---|
@@ -380,7 +380,6 @@ Este DRP debe revisarse en las siguientes circunstancias:
 | parse_db | 77 MB |
 | mediflow_db | 18 MB |
 | elore_db | 13 MB |
-| rendiciones_db | 12 MB |
 | hub_db | 12 MB |
 | axiomadocs | 11 MB |
 | chequescloud | 11 MB |
@@ -394,6 +393,13 @@ Este DRP debe revisarse en las siguientes circunstancias:
 > la app, se quitó el vhost nginx y se hizo `DROP DATABASE` (respaldo en
 > `/var/lib/postgresql/clubix_db-axioma-decom-20260704-171526.dump` en axioma). La producción de
 > clubix vive en el server **clubix**.
+
+> **Nota (2026-07-05):** se decomisionó la app **rendiciones** y su base `rendiciones_db` (12 MB)
+> como parte de la Fase 1 de estandarización (ver `plan-trabajo-estandarizacion.md`). Código en
+> GitHub (HEAD pusheado) + tarball en `/var/backups/rendiciones-decom-20260704.tar.gz`; DB con
+> `pg_dump -Fc` en `/var/lib/postgresql/rendiciones_db-decom-20260704.dump` antes del `DROP`.
+> También se dio de baja **AxiomaWeb** (sin DB): vhost + cert removidos, código en
+> `/var/backups/AxiomaWeb-decom-20260704.tar.gz`.
 
 ### `clubix` — servidor **clubix** (179.43.123.248:2222, PG14) — 1 base
 

@@ -12,7 +12,7 @@
 | Fase | Descripción | Riesgo | Estado |
 |---|---|---|---|
 | 0 | Cerrar inventario | Nulo (solo lectura) | [x] hecho (2026-07-04) |
-| 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [ ] |
+| 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [x] hecho (2026-07-05) |
 | 2 | Documento del estándar | Nulo | [ ] |
 | 3 | Secretos SOPS+age | Nulo (no toca servers) | [ ] |
 | 4 | Migración piloto (mini) | Medio | [ ] |
@@ -68,30 +68,31 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 
 ### AxiomaWeb (puerto 3150, sin DB)
 
-- [ ] Verificar desuso: puerto no escucha / sin tráfico / DNS sin apuntar
-- [ ] Backup del código (confirmar repo `martin4yo/AxiomaWeb` al día en git)
-- [ ] Confirmar que no tiene base de datos propia que respaldar
-- [ ] Parar PM2/servicio de la app
-- [ ] Quitar vhost nginx (sites-enabled + sites-available) y `nginx reload`
-- [ ] Borrar cert Let's Encrypt si aplica
-- [ ] Limpiar directorio de la app y usuario si corresponde
-- [ ] Registrar la baja (fecha + qué se removió)
+- [x] Verificar desuso: no escucha en 3150 / sin proceso / sin hits en access.log
+- [x] Backup del código: HEAD local `eee1458` pusheado a origin ✅ + tarball `AxiomaWeb-decom-20260704.tar.gz` (100M, gzip OK)
+- [x] Confirmar que no tiene base de datos propia → **no tiene DB**
+- [x] Parar PM2/servicio → no había proceso activo
+- [x] Quitar vhost nginx (era archivo regular en sites-enabled, no symlink) + `nginx -t` + reload sin corte
+- [x] Borrar cert Let's Encrypt `axiomaweb.axiomacloud.com` (`certbot delete`)
+- [x] Mover directorio a `/var/backups/AxiomaWeb-decom-20260704.dir` (reversible, no rm)
+- [x] Registrar la baja (2026-07-05)
 
-### rendiciones (puerto 5050, sin DB)
+### rendiciones (puerto 5050, con DB `rendiciones_db`)
 
-- [ ] Verificar desuso: puerto no escucha / sin tráfico / DNS sin apuntar
-- [ ] Backup del código (confirmar repo `martin4yo/Rendiciones` al día en git)
-- [ ] Confirmar que no tiene base de datos propia que respaldar
-- [ ] Parar PM2/servicio de la app
-- [ ] Quitar vhost nginx y `nginx reload`
-- [ ] Borrar cert Let's Encrypt si aplica
-- [ ] Limpiar directorio de la app y usuario si corresponde
-- [ ] Registrar la baja (fecha + qué se removió)
+- [x] Verificar desuso: no escucha en 5050 / sin proceso / sin vhost / sin cert
+- [x] Backup del código: HEAD local `af17c79` pusheado a origin ✅ + tarball `rendiciones-decom-20260704.tar.gz` (459M, gzip OK)
+- [x] **Respaldar DB** `rendiciones_db` (12 MB) → `pg_dump -Fc` → `rendiciones_db-decom-20260704.dump` (178K, pg_restore listable OK)
+- [x] Parar PM2/servicio → no había proceso activo
+- [x] Vhost / cert → no tenía
+- [x] Mover directorio a `/var/backups/rendiciones-decom-20260704.dir` (reversible, no rm)
+- [x] **DROP DATABASE `rendiciones_db`** (aprobado por el usuario; dump de respaldo intacto)
+- [x] Registrar la baja (2026-07-05)
 
 ### Cierre de Fase 1
 
-- [ ] Confirmar que solo quedan 2 apps corriendo como root (axioma-corporate, checkpoint)
-- [ ] Actualizar inventario §2 (marcar AxiomaWeb y rendiciones como dadas de baja)
+- [x] Apps root remanentes: solo **corporate** (backend node 3005) — `checkpoint` resultó estático (no root); AxiomaWeb dado de baja
+- [x] Actualizar inventario §2 (marcar AxiomaWeb y rendiciones como dadas de baja)
+- [x] Actualizar DRP Apéndice A (quitar `rendiciones_db` de axioma)
 
 ---
 
@@ -262,3 +263,5 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 | Fecha | Fase / App | Acción | Resultado |
 |---|---|---|---|
 | 2026-07-04 | 0 | Relevamiento in-situ de los 3 servers (PM2, puertos, git, nginx, DBs, Node, ollama) | ✅ inventario §2 cerrado; 5 hallazgos que ajustan fases 1/4/5/6/7 |
+| 2026-07-05 | 1 · AxiomaWeb | Backup (git+tar 100M) → quitar vhost + reload → borrar cert → mover dir a backup | ✅ baja completa (sin DB) |
+| 2026-07-05 | 1 · rendiciones | Backup (git+tar 459M) + pg_dump DB (178K) → mover dir → DROP rendiciones_db | ✅ baja completa (DB eliminada, dump intacto) |
