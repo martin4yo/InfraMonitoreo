@@ -55,7 +55,16 @@ Por cada app confirmar: **repo git exacto + método de auth**, **base de datos**
 
 - [ ] **Fase 4 (mini):** owner ya es `miniapp` → la migración de owner **ya está hecha**; queda solo `.cjs`→`.js` y decidir el repo
 - [ ] **Fase 5 (checkpoint/corporate):** ambos son estáticos (+ backend 3005 en corporate) → "sacar de root" es trivial, no requiere migrar app node completa
-- [ ] **Fase 6/7 (elore, hub):** **crean/confirman repo remoto** antes de poder redesplegar (hoy sin remote) — bloqueante para Fase 7
+- [ ] **Fase 6/7 (elore):** **crear/confirmar repo remoto** antes de poder redesplegar (hoy sin remote) — bloqueante para Fase 7
+- [x] **hub:** SÍ tiene remote → `AxiomaCloud/ProHub` (SSH), branch `main`, `name: hub-monorepo`. El "sin remote" de Fase 0 fue falso negativo por `safe.directory`.
+- [ ] **⚠ Fase 6 (axio) — DEPLOY CON `origin` MAL APUNTADO (hallazgo 2026-07-17):** el checkout desplegado `/var/www/axio` (`name: axio`, con backend/frontend Vite/`ml-service/`+`db-agent/`) tiene `origin = AxiomaCloud/ProHub` (HTTPS) — **pero ProHub es el repo de hub** (`hub-monorepo`). **El repo propio de axio SÍ existe y es correcto:** `github.com/AxiomaCloud/axio.git`, clonado local en `~/Desarrollos/cuthulu` (`name: axio`, mismo árbol). O sea: dos repos correctos y separados (ProHub=hub, axio=axio); lo único mal es el `origin` del deploy de axio en axiodemo. **✅ ProHub NO fue ensuciado (verificado 2026-07-17):** `origin/main` de ProHub es 100% hub (`name: hub-monorepo`, marcadores `shared`/`prototypes`/`pricing_hub.html` presentes; `ml-service`/`db-agent`/`CONEXION_ERP.md` ausentes); ningún commit de axio en el historial; ramas solo `main` + `feat/udesa-demo` (ambas de hub). Los commits de axio del server (`22eaff3`, etc.) **nunca se pushearon** → el enredo fue solo de config (`origin` mal), sin daño de datos.
+**Corrección (Fase 6):** (1) re-apuntar `origin` de `/var/www/axio` a `axio.git`; (2) reconciliar los cambios locales sin commitear del server (`ml-service/main.py`, `kb_repo.py`, `frontend/.env.production`) y el HEAD `22eaff3` con `axio.git`; (3) NO tocar ProHub (es de hub).
+
+**Estado de repos axio (verificado 2026-07-17):**
+- Repo canónico: `github.com/AxiomaCloud/axio.git`. Clon local en `~/Desarrollos/cuthulu`, **actualizado a `afa7461`** (pull ff-only limpio, 127 archivos vs el viejo `1ad60fb`).
+- **`axio.git` (`afa7461`) está más adelantado que el deploy del server** (`/var/www/axio` en `22eaff3`) → el deploy de axiodemo está viejo, además del origin mal.
+- **axio YA tiene CI/CD propio**: `.github/workflows/deploy-axio.yml` + `deploy-db-agent.yml` (GitHub Actions). Para Fases 6–7: entender/alinear ese pipeline con el estándar, no reinventarlo.
+- `db-agent/` es un subproyecto de axio (Node) con su `.service` + `DEPLOY_CLUBIX.md` → es el proceso `:3005` de axioma (`/opt/axio-db-agent`); se despliega en varios servers. **Nota:** el `db-agent/` de axio (con `DEPLOY_CLUBIX.md` + `.service`) es el proceso `:3005` de axioma (`/opt/axio-db-agent`) — parte del monorepo de axio, contemplarlo en el manifiesto.
 - [ ] **Fase 1 (rendiciones):** tiene DB `rendiciones_db` → respaldar esa base antes de la baja, no solo el código
 - [ ] **Fase 6 (axio-ml):** normalizar owner `axiomacloud` → usuario dedicado, además del hook ollama
 
@@ -124,9 +133,91 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 
 ---
 
-## Fase 4 — Migración piloto: mini (owner axiomacloud → miniapp)
+## Fase 4 — Migración piloto
 
-> App elegida por bajo riesgo. Ventana de bajo tráfico + rollback listo antes de tocar.
+> **Cambio de piloto (2026-07-17):** mini quedó descartado como piloto por estar **en
+> producción**. Se elige **hub**, que está **caída** (bajo riesgo: no hay servicio vivo que
+> romper) y ejercita un redespliegue realista.
+
+> **Encuadre (2026-07-17):** revivir hub se trata como un **ensayo del procedimiento de
+> redeploy** — como si hub se hubiera perdido y tuviéramos que reinstalarla de cero. Cada
+> paso se mapea a los 9 del `lib-redeploy.sh` (plan §4), así hub adelanta el PoC de la Fase 8
+> y lo aprendido se vuelca en la librería + el manifiesto de hub. Diferencia con un redeploy
+> puro: el código ya está en disco (hub no tiene remote git) y la DB `hub_db` ya existe; esos
+> dos huecos son, de hecho, hallazgos del ensayo (ver "Aprendizajes" al cierre).
+
+### Piloto elegido: hub (redeploy-drill: reinstalar + estandarizar)
+
+**Mapa a los 9 pasos del redeploy (lib-redeploy §4):**
+| Paso lib-redeploy | En este ensayo de hub |
+|---|---|
+| 1. crear usuario `<app>app` | ya existe `hubapp` (uid 993) → se reusa |
+| 2. instalar runtime | Node v20.20.2 ya presente + PM2 |
+| 3. `git clone` | ✅ remote real: `AxiomaCloud/ProHub` (SSH), branch `main`. El código en disco ya es ese repo (`safe.directory` requerido por owner `hubapp`) |
+| 4. restaurar DB (pgBackRest) | `hub_db` ya existe y está sana → no se restaura; en un DR real vendría de repo1/R2 |
+| 5. descifrar+colocar `.env` (SOPS) | `hub-backend.env` + `hub-frontend.env` desde infra-secrets |
+| 6. `npm install` + build | backend `npm ci`+prisma+build, frontend `npm ci`+build |
+| 7. PM2 + ecosystem + systemd | `pm2 start` + `pm2 save` + crear `pm2-hubapp.service` + enable |
+| 8. vhost nginx + cert | revisar/ajustar vhost + `nginx -t` + reload; cert si aplica |
+| 9. verificar (health + DB) | health :5200/:8089 + conecta a `hub_db` + boot test |
+
+**Diagnóstico (relevado in-situ 2026-07-17, solo lectura):**
+- hub está detenida desde ~13-jun por un **deploy inconcluso**: en `/var/www/hub` está el
+  código fuente completo (backend `src/`+`server.ts`+`tsconfig`+`prisma/schema.prisma`;
+  frontend `src/`+`next.config.js`) pero **sin `node_modules` ni build** (`dist/` en backend,
+  `.next` en frontend) → PM2 no podía arrancar `dist/server.js`, no logueó nada, y sin servicio
+  systemd nada lo reintentó. El server no rebooteó (uptime 27-jun).
+- **No es un crash**: es una instalación a mitad de camino. Logs `/var/log/hub/` vacíos.
+- **DB `hub_db` sana** (43 tablas). **`.env` recuperable** desde infra-secrets
+  (`hub-backend.env` 28 vars + `hub-frontend.env` 2 vars, descifran OK); además hay un
+  `backend/.env` en disco. **Node v20.20.2** correcto.
+- **CORRECCIÓN (2026-07-17):** hub **SÍ tiene remote git** → `git@github.com:AxiomaCloud/ProHub.git`
+  (SSH), branch `main`. El "sin remote" de la Fase 0 fue un falso negativo (git bloqueaba el
+  repo por `safe.directory`, owner `hubapp`). hub y axio **comparten el repo ProHub** pero son
+  proyectos distintos (`@hub/backend`/`@hub/frontend` vs axio). Copia local del repo también en
+  `~/Desarrollos/hub`. → **hub SÍ es redesplegable** (paso 3 del lib-redeploy resuelto).
+- **Desvíos al estándar a corregir de paso:** no existe `pm2-hubapp.service` (no arranca al
+  reboot); vhost de hub a revisar.
+
+**Plan de ejecución (pendiente de OK explícito, una acción a la vez):**
+
+#### Preparación (backup + rollback)
+- [ ] Backup del código actual de hub (tar de `/var/www/hub` a `/var/backups/`)
+- [ ] Confirmar/colocar `.env` (comparar disco vs infra-secrets; usar el de SOPS si difiere)
+- [ ] Dump de `hub_db` antes de tocar (por si el build corre migraciones Prisma)
+- [ ] Registrar estado actual para rollback (hub caída = rollback = volver a caída)
+
+#### Ejecución (completar deploy + estandarizar)
+- [ ] backend: `npm ci` + `prisma generate` + `npm run build` (genera `dist/`)
+- [ ] backend: aplicar migraciones Prisma sólo si corresponde (¿`prisma migrate deploy`? — **decidir con OK**, toca la DB)
+- [ ] frontend: `npm ci` + `npm run build` (genera `.next`)
+- [ ] Arrancar con `pm2 start ecosystem.config.js` como `hubapp`
+- [ ] `pm2 save` + **crear `pm2-hubapp.service`** (`pm2 startup`) + `systemctl enable`
+- [ ] Revisar/ajustar vhost nginx de hub + `nginx -t` + reload
+
+#### Verificación
+- [ ] Health HTTP backend (:5200) y frontend (:8089) responden
+- [ ] hub conecta a `hub_db`
+- [ ] Boot test: `systemctl restart pm2-hubapp` levanta ambos procesos
+- [ ] Confirmar con el usuario que la app funciona (no solo que levanta)
+
+#### Cierre
+- [ ] Documentar lo aprendido (deploy inconcluso → checklist de build en el redespliegue)
+- [ ] Actualizar inventario §2 (hub → online, con systemd)
+
+#### Aprendizajes para el redeploy (Fases 7–8) — se completan al ejecutar
+- [x] **hub SÍ tiene remote** (`AxiomaCloud/ProHub`, SSH) → redesplegable. El relevamiento de Fase 0 dio "sin remote" por `safe.directory`: **el redeploy debe setear `safe.directory` o clonar como el owner correcto**, no asumir "sin remote" cuando `git` falla por owner.
+- [ ] **hub y axio comparten repo (ProHub)** → el manifiesto debe declarar qué proyecto/subdir/branch usa cada uno (monorepo con dos apps).
+- [ ] Anotar tiempos reales de cada paso (build backend/frontend) → insumo para el RTO de la Fase 8.
+- [ ] Todo comando ejecutado (npm/prisma/pm2/nginx) es candidato a línea del futuro `lib-redeploy.sh` — capturarlos.
+- [ ] Confirmar orden seguro: ¿build antes o después de colocar `.env`? ¿migraciones idempotentes?
+
+---
+
+## Fase 4 (original) — Migración piloto: mini (owner axiomacloud → miniapp) — DESCARTADO como piloto
+
+> mini quedó **en producción** → no es el piloto. Los ajustes de mini (ecosystem `.cjs`→`.js`,
+> repo) se harán en Fase 5 con su propia ventana. Se conserva el checklist abajo como referencia.
 
 ### Preparación
 
