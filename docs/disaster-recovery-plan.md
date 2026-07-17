@@ -31,6 +31,12 @@ Este documento define los procedimientos para recuperar los servicios de base de
 - **Retención:** full=4, diff=7 en ambos repositorios.
 - **Cron en dev-1:** full los domingos, diff lunes a sábado, incr cada 4 horas.
 
+> **⚠ Nota de credenciales (2026-07-17):** los escenarios C/D asumen las credenciales de R2
+> "desde el vault". Hoy **en la práctica viven en texto plano** en `/etc/pgbackrest/pgbackrest.conf`
+> de cada server (no en un vault). Además se expusieron en una sesión de trabajo el 2026-07-17 →
+> **rotar el R2 API token en Cloudflare** y, como mejora, moverlas al repo `infra-secrets` (SOPS).
+> Ver `docs/pgbackrest-setup.md`.
+
 ### 1.3 Objetivos de recuperación
 
 | Tier | Servicio | RPO | RTO |
