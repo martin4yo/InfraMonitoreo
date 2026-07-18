@@ -46,11 +46,17 @@ paralelo** (pgBackRest los mantiene a ambos en cada operación):
   db hosts el dueño es `postgres` (corre el `archive_command`).
 - **Retención:** `repo1-retention-full=4`, `repo1-retention-diff=7`.
 
-> **⚠ Pendiente de seguridad (2026-07-17):** las credenciales de R2 (`repo2-s3-key-secret`
-> y `repo2-cipher-pass`) están en **texto plano** en `/etc/pgbackrest/pgbackrest.conf` de
-> cada server. Además quedaron expuestas en el output de una sesión de trabajo el 2026-07-17
-> → **considerarlas comprometidas y rotar el R2 API token en Cloudflare** cuando sea posible.
-> Mejora futura: llevar esas credenciales al repo `infra-secrets` (SOPS) en vez de texto plano.
+> **✓ Token R2 rotado (2026-07-17):** el API token de R2 (`repo2-s3-key` + `repo2-s3-key-secret`)
+> se **rotó** — el viejo (`a8790e48…`) quedó comprometido (expuesto en texto plano + sesión) y
+> fue **borrado en Cloudflare**; el nuevo (`b47676fd…`) se aplicó en los **5 archivos**: `dev-1`
+> (`pgbackrest.conf`+`db.conf`) y `axioma`/`clubix`/`axiodemo` (`pgbackrest.conf`), con backup
+> `.bak-<ts>` de cada uno. Verificado con `pgbackrest check` en las 4 stanzas (archiva a repo2/R2)
+> ANTES y DESPUÉS de borrar el viejo. El **`cipher-pass` NO se rotó** (cifra los backups ya en R2).
+> Credenciales custodiadas cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS).
+>
+> **Pendiente menor:** las creds siguen en **texto plano** en los `pgbackrest.conf` (pgBackRest
+> las lee de ahí); protegidas por permisos 640 + firewall. SOPS es la copia custodiada, no el
+> origen que lee pgBackRest. Mejora futura: que el server las lea desde origen cifrado.
 
 ## Confianza SSH (bidireccional por stanza)
 
