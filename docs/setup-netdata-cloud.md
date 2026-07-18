@@ -72,23 +72,31 @@ server {
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## 5. pgBackRest: alarma de antigüedad de backup (fase 2)
+## 5. pgBackRest: alarma de antigüedad de backup ✅ DESPLEGADO (26-May-2026)
 
-`prod-1` y `dev-1` usan pgBackRest. La idea es alertar si el último backup OK es
-demasiado viejo. Como Netdata no trae colector nativo de pgBackRest, se usa un
-colector custom que parsea `pgbackrest info --output=json`:
+> **Estado: en verde y verificado (2026-07-18, hallazgo H08 del plan de remediación).** El
+> monitoreo está desplegado en **dev-1** (repo host de pgBackRest) desde el 26-May-2026, con charts
+> con datos reales y **todas las alarmas en CLEAR**. No es un pendiente.
 
-```bash
-# /usr/local/bin/pgbackrest-backup-age.sh  (corre como el usuario de pgbackrest)
-# Emite la antigüedad en segundos del último backup full/incr OK.
-pgbackrest info --output=json \
-  | jq '[.[].backup[].timestamp.stop] | max' \
-  | awk -v now="$(date +%s)" '{print "pgbackrest.backup_age age = " now-$1}'
-```
+dev-1 corre un colector custom que parsea `pgbackrest info --output=json` y emite las métricas a
+Netdata vía **statsd**. Piezas reales desplegadas (no la del snippet viejo que decía
+`pgbackrest-backup-age.sh`):
 
-Esto se conecta a Netdata vía `charts.d`/`statsd` y se le pone una alarma
-`> 90000` (25 h) en `health.d/pgbackrest.conf`. Lo dejamos para la fase 4 una vez
-que el resto esté andando; queda documentado acá para no perderlo.
+- **Colector:** `/usr/local/bin/pgbackrest-collect.py` (versionado en el repo como
+  `netdata/pgbackrest/pgbackrest-collect.py`). Es **multi-repo aware**: la stanza se considera sana
+  si **al menos un repo** (repo1 dev-1 / repo2 R2) está OK — así el status agregado `mixed`(4) o
+  `running`(3) durante un backup / con R2 atrasado **no** dispara falsos positivos de `backup_failed`.
+- **Scheduler:** `/etc/cron.d/pgbackrest-netdata` → `*/15 * * * * pgbackrest python3 pgbackrest-collect.py`.
+- **Config statsd:** `netdata/statsd.d/pgbackrest.conf` (charts `pgbackrest.backup_age`, `.status`
+  agregados + `.backup_age_stanza`, `.wal_age_stanza`, `.status_stanza` por stanza, dims
+  AxiomaCloudProd/clubix/axiodemo/dev-1).
+- **Alarmas:** `netdata/health.d/pgbackrest.conf` (`backup_age` >25h/48h, `backup_failed`,
+  `wal_delayed` por stanza).
+- **Deploy:** `scripts/30-deploy-pgbackrest-monitoring.sh` (hace `systemctl restart netdata` — statsd
+  nuevo requiere restart, no reload).
+
+Verificación (2026-07-18): charts con datos reales; alarmas `pgbackrest_backup_age`,
+`pgbackrest_backup_failed` y los 4 `pgbackrest_wal_delayed_*` todas en **CLEAR**.
 
 **Pendiente además:** en `prod-2` y `prod-3` **no hay pgBackRest**. Conviene
 implementarlo para tener backups en los 3 de producción (tema aparte del

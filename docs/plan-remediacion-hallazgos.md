@@ -45,7 +45,7 @@ invasivos: no se ejecutan sin aprobación puntual.
 | **1 — Quick wins (no cortan servicio)** | H14 | `stub_status` nginx sin datos | los 3 con nginx | 🟢 | Muy bajo | [x] (2026-07-18) |
 | 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
 | 1 | H12 | `origin` de axio mal apuntado (a ProHub) | axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
-| **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [ ] |
+| **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [x] (2026-07-18) |
 | 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [ ] |
 | **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [ ] |
 | 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [ ] |
@@ -264,13 +264,30 @@ Como es aditivo, revertir no deja rastro en el flujo de backups.
 - **Prueba activa** (opcional, controlada): simular antigüedad (offset temporal en el emisor) y confirmar
   que la alarma pasa a WARN y llega la notificación → luego revertir.
 
+> **RESUELTO (2026-07-18) — ya estaba desplegado y en verde; no requirió intervención en dev-1.**
+> El diagnóstico en vivo reveló que la premisa del plan ("sin desplegar") era **incorrecta**: el
+> monitoreo completo se desplegó el **26-May-2026** en dev-1 y funciona. El colector es
+> `/usr/local/bin/pgbackrest-collect.py` (no el `pgbackrest-backup-age.sh` que asumía el plan),
+> corre por **cron cada 15 min** (`/etc/cron.d/pgbackrest-netdata`, como usuario `pgbackrest`), y
+> `health.d/pgbackrest.conf` + `statsd.d/pgbackrest.conf` están desplegados (md5 idénticos al repo).
+> Los charts `pgbackrest.backup_age/.status` (agregados) + `.backup_age_stanza/.wal_age_stanza/
+> .status_stanza` (por stanza, 4 dims: AxiomaCloudProd/clubix/axiodemo/dev-1) llegan con datos
+> reales, y **todas las alarmas están en CLEAR** (backup_age 3557s, backup_failed status_ok=1, los
+> 4 wal_delayed en CLEAR). `pgbackrest info --output=json` corre OK como `pgbackrest` (4 stanzas,
+> status_code=0). **La única acción fue de repo (sin tocar dev-1):** el colector del repo estaba una
+> versión atrás (pre dual-repo) → se reemplazó por la versión multi-repo del server (md5-idéntica),
+> que evita falsos positivos de `backup_failed` cuando el status agregado da `mixed`(4)/`running`(3)
+> con repo2 R2 atrasado o durante un backup. **Corrección al plan:** el deploy real es
+> `scripts/30-deploy-pgbackrest-monitoring.sh` (con `systemctl restart netdata`), NO
+> `20-deploy-configs.sh`; y no hubo que desplegar nada porque el server ya estaba en verde.
+
 **Sub-pasos:**
-- [ ] Diagnosticar qué falta en dev-1 (colector emisor / statsd.d / health.d desplegado) (lectura)
-- [ ] Completar/ajustar el colector emisor en el repo (parseo `pgbackrest info --output=json`)
-- [ ] ⚠ Desplegar colector + health.d + statsd.d a dev-1 + timer, `reload netdata` — **OK explícito**
-- [ ] Verificar charts `pgbackrest.*` con datos + alarmas en CLEAR en Cloud
-- [ ] (Opcional) prueba activa de disparo de alarma → revertir
-- [ ] Marcar el pendiente como cerrado en `setup-netdata-cloud.md` §5
+- [x] Diagnosticar qué falta en dev-1 (colector emisor / statsd.d / health.d desplegado) (lectura) → **ya todo desplegado 26-May, en verde**
+- [x] Completar/ajustar el colector emisor en el repo → reconciliado: traída la versión multi-repo del server (md5-idéntica), sin editar dev-1
+- [x] ~~Desplegar a dev-1~~ **innecesario**: server ya en verde desde 26-May; no se tocó dev-1 ni se reinició netdata
+- [x] Verificar charts `pgbackrest.*` con datos + alarmas en CLEAR en Cloud → **verificado en vivo (todas CLEAR)**
+- [ ] ~~(Opcional) prueba activa de disparo de alarma~~ → no se ejecuta (aditivo ya verificado en CLEAR)
+- [x] Marcar el pendiente como cerrado en `setup-netdata-cloud.md` §5 (actualizado: nombre real del colector, multi-repo, deploy `30-…`, estado verde)
 
 ---
 
@@ -671,6 +688,7 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-18 | H14 | Diagnóstico: colector nginx apunta a `:8088` (no `:80`), stub_status ya presente y con datos en los 3 | ✅ verde — sin intervención; solo comentario `:80`→`:8088` corregido en repo |
 | 2026-07-18 | H12 | `remote set-url origin` de axio → `github-axio:AxiomaCloud/axio.git` (SSH, deploy key funcional; el plan asumía HTTPS/no había credencial) + fetch de verificación | ✅ verde — trae axio (no hub), working tree intacto, sin pull |
 | 2026-07-18 | H06 | `.env` → 600 con backup: axiodemo x2 (owner OK), dev-1 x3 (elore directo; mediflow `chown root`; checkpoint `chown axiomacloud`) | ✅ verde — 5 en 600, owners leen OK, apps vivas |
+| 2026-07-18 | H08 | Diagnóstico: monitoreo pgBackRest **ya desplegado 26-May** en dev-1 (colector `pgbackrest-collect.py` + cron 15min + health.d + statsd.d), charts con datos, alarmas en CLEAR. Solo se reconcilió el colector del repo (versión multi-repo del server, md5-idéntica) — sin tocar dev-1 | ✅ verde — ya estaba andando; repo puesto al día |
 
 ---
 
