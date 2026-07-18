@@ -89,8 +89,12 @@ emergencia (solo entra por llave). ✅ **ufw instalado y activo** (2026-07-17): 
 pvresize → lvextend +100%FREE → resize2fs ext4, sin reboot). `/` pasó de **12 G a 64 G** (53 G libres).
 Backup de la tabla de particiones en `/root/sda-parttable.bak-*.sfdisk`. Queda ~2 G sin asignar en el VG
 (remanente por redondeo de extents; disponible para un LV aparte de `/var/lib/postgresql` si hiciera falta).
+✅ **Netdata instalado + claimed (2026-07-17)**: agente v2.10.4 (stable, igual que los otros 4) reclamado al
+mismo Space/Room de Netdata Cloud, ACLK conectado, reportando. `:19999` no expuesto en ufw (reporta saliente).
+Faltan los colectores específicos (postgres/nginx/pgBackRest) — se suman con `scripts/20-deploy-configs.sh`
+cuando haya apps para cada prueba de restore.
 Pendientes menores: fail2ban caído (jail apunta a log inexistente, usar `backend=systemd`), `ubuntu` NOPASSWD
-del cloud-init (password ya bloqueada). Para integrar: Netdata (+claim) y pgBackRest cuando se arme cada prueba.
+del cloud-init (password ya bloqueada). Para integrar: pgBackRest cuando se arme cada prueba.
 
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.
