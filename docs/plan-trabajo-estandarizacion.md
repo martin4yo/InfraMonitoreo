@@ -62,8 +62,10 @@ Por cada app confirmar: **repo git exacto + método de auth**, **base de datos**
 
 **Estado de repos axio (verificado 2026-07-17):**
 - Repo canónico: `github.com/AxiomaCloud/axio.git`. Clon local en `~/Desarrollos/cuthulu`, **actualizado a `afa7461`** (pull ff-only limpio, 127 archivos vs el viejo `1ad60fb`).
-- **`axio.git` (`afa7461`) está más adelantado que el deploy del server** (`/var/www/axio` en `22eaff3`) → el deploy de axiodemo está viejo, además del origin mal.
-- **axio YA tiene CI/CD propio**: `.github/workflows/deploy-axio.yml` + `deploy-db-agent.yml` (GitHub Actions). Para Fases 6–7: entender/alinear ese pipeline con el estándar, no reinventarlo.
+- **Método de deploy real (reconstruido por reflog + bash_history):** se corre **en el server** `sudo bash /var/www/axio/scripts/deploy.sh`, que hace `git -C /var/www/axio fetch origin main` + `pull origin main` como `axioapp` + build + restart. NO es copia de archivos desde local. El reflog muestra ~15 `pull origin main` (ff) entre 15–23 may.
+- **Se congeló el 23-may** en `22eaff3` (último pull OK). `axio.git` canónico ya está en `afa7461` (~5 commits más) que el server nunca recibió.
+- **⚠ BOMBA EN EL DEPLOY:** hoy `origin` de `/var/www/axio` = `ProHub` (repo de hub). En mayo ese origin *era axio* (por eso los pulls traían axio); cambió a ProHub **después** del 23-may → desde entonces `deploy.sh` falla en el `fetch` por falta de credencial HTTPS. **Si se arregla la credencial SIN re-apuntar el origin primero, el próximo `deploy.sh` haría `pull origin main` desde ProHub → traería hub → rompe axio en prod.** Corrección obligatoria antes de volver a deployar axio: `git remote set-url origin git@github.com:AxiomaCloud/axio.git` en `/var/www/axio`, reconciliar los 3 cambios locales (`ml-service/main.py`, `kb_repo.py`, `frontend/.env.production`), recién ahí pull.
+- **axio también tiene CI/CD** (`.github/workflows/deploy-axio.yml` + `deploy-db-agent.yml`) — coexiste con el `deploy.sh`; aclarar cuál es el método vigente en Fase 6.
 - `db-agent/` es un subproyecto de axio (Node) con su `.service` + `DEPLOY_CLUBIX.md` → es el proceso `:3005` de axioma (`/opt/axio-db-agent`); se despliega en varios servers. **Nota:** el `db-agent/` de axio (con `DEPLOY_CLUBIX.md` + `.service`) es el proceso `:3005` de axioma (`/opt/axio-db-agent`) — parte del monorepo de axio, contemplarlo en el manifiesto.
 - [ ] **Fase 1 (rendiciones):** tiene DB `rendiciones_db` → respaldar esa base antes de la baja, no solo el código
 - [ ] **Fase 6 (axio-ml):** normalizar owner `axiomacloud` → usuario dedicado, además del hook ollama
@@ -181,29 +183,44 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 
 **Plan de ejecución (pendiente de OK explícito, una acción a la vez):**
 
+> **La DB `hub_db` NO se pisa.** El drill reinstala **solo la aplicación** (código+build+arranque).
+> La causa de la caída fue un build faltante, no el esquema → la DB ya debería estar correcta.
+> El único paso que tocaría el esquema es `prisma migrate deploy`, que **no se corre salvo OK
+> explícito**; antes se chequea con `prisma migrate status` (solo lectura). Igual se hace `pg_dump`
+> de respaldo como red de seguridad.
+
 #### Preparación (backup + rollback)
 - [ ] Backup del código actual de hub (tar de `/var/www/hub` a `/var/backups/`)
 - [ ] Confirmar/colocar `.env` (comparar disco vs infra-secrets; usar el de SOPS si difiere)
 - [ ] Dump de `hub_db` antes de tocar (por si el build corre migraciones Prisma)
 - [ ] Registrar estado actual para rollback (hub caída = rollback = volver a caída)
 
-#### Ejecución (completar deploy + estandarizar)
-- [ ] backend: `npm ci` + `prisma generate` + `npm run build` (genera `dist/`)
-- [ ] backend: aplicar migraciones Prisma sólo si corresponde (¿`prisma migrate deploy`? — **decidir con OK**, toca la DB)
-- [ ] frontend: `npm ci` + `npm run build` (genera `.next`)
-- [ ] Arrancar con `pm2 start ecosystem.config.js` como `hubapp`
-- [ ] `pm2 save` + **crear `pm2-hubapp.service`** (`pm2 startup`) + `systemctl enable`
-- [ ] Revisar/ajustar vhost nginx de hub + `nginx -t` + reload
+#### Ejecución (completar deploy + estandarizar) — EJECUTADO 2026-07-17
+- [x] Backup: tar `/var/backups/hub-predeploy-20260717.tar.gz` (11M) + `pg_dump` `hub_db-predeploy-20260717.dump` (176K, 314 objetos) ✅
+- [x] `.env` confirmado idéntico a infra-secrets (28 vars, mismos valores) → no se tocó
+- [x] **`npm ci` DESDE LA RAÍZ del monorepo** (workspaces backend/frontend/shared) — el `npm ci` por-workspace NO instala Prisma. **Aprendizaje clave.**
+- [x] build backend (`tsc`→`dist/server.js`) + frontend (`next build`→`.next`) ✅
+- [x] **`prisma generate` DESDE LA RAÍZ** (Prisma 6.19 local; el `npx` baja Prisma 7 que rompe el schema). Sin esto → crash `@prisma/client did not initialize`.
+- [x] Migración pendiente `add_purchase_requests`: la DB ya la tenía aplicada (y MÁS: 25 cols vs 16) → `prisma migrate resolve --applied` (NO corre SQL) + limpieza de la fila fallida en `_prisma_migrations`. **DB intacta, sin `db push`.**
+- [x] Arranque `pm2 start ecosystem.config.js` como `hubapp` ✅
+- [x] `pm2 save` + **`pm2-hubapp.service` creado + enabled** (era el desvío que causó la caída original) ✅
+- [x] **vhost nginx de hub creado + cert TLS emitido** (2026-07-17): hub NO tenía vhost ni cert (nunca se publicó). Creado `/etc/nginx/sites-available/hub` (molde parse): `hub.axiomacloud.com`→`:8089` (front Next) + `api.hub.axiomacloud.com`→`:5200` (backend, `/api/*` + `wss://`). Cert Let's Encrypt webroot para ambos SAN (exp 2026-10-15, autorenew). `nginx -t` OK + reload sin corte.
 
-#### Verificación
-- [ ] Health HTTP backend (:5200) y frontend (:8089) responden
-- [ ] hub conecta a `hub_db`
-- [ ] Boot test: `systemctl restart pm2-hubapp` levanta ambos procesos
-- [ ] Confirmar con el usuario que la app funciona (no solo que levanta)
+#### Verificación — EJECUTADA 2026-07-17
+- [x] Backend `:5200/health` → HTTP 200 (`{"status":"ok","message":"Hub API is running"}`)
+- [x] Frontend `:8089` → HTTP 200 (`<title>Axioma - Hub</title>`); **público**: `https://hub.axiomacloud.com` HTTP 200 + cert válido, `https://api.hub.axiomacloud.com/health` HTTP 200, redirect 80→443 OK
+- [x] hub conecta a `hub_db`: rutas que pegan a la DB responden 400/401 (no 500) → Prisma consulta OK; **código viejo convive con DB nueva** (Prisma ignora las columnas extra)
+- [x] **Boot test OK**: tras `pm2 kill` + `systemctl start pm2-hubapp` desde cero → `is-active: active`, ambos procesos online, health 200. hub sobrevive un reboot.
+- [x] **Login funcional** (2026-07-17): tras resolver 2 problemas de DB encadenados, `POST /api/auth/login` responde 401 a credenciales inválidas (comportamiento correcto), ya no 500. Falta que el usuario pruebe con credenciales reales desde el browser.
 
-#### Cierre
-- [ ] Documentar lo aprendido (deploy inconcluso → checklist de build en el redespliegue)
-- [ ] Actualizar inventario §2 (hub → online, con systemd)
+  **Problemas de DB resueltos (post-arranque):**
+  1. **`hub_db` desincronizada con el código** (no era productiva): al `User` le faltaban columnas que el código usa (`whatsappPhone`, `mustChangePassword`) → login daba 500 (`P2022 column does not exist`). Fix: **`prisma db push --accept-data-loss`** (como owner postgres) → DB sincronizada al `schema.prisma`. Autorizado porque la base NO estaba productiva.
+  2. **Permisos**: el `db push` como postgres dejó las tablas con owner postgres; `hubuser` (rol de la app) perdió acceso → `42501 permission denied for table User`. Fix: `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public TO hubuser` + `ALTER DEFAULT PRIVILEGES` (para futuros push/migrate). **Aprendizaje para el redeploy:** tras un `db push`/`migrate` ejecutado como owner distinto al de la app, re-otorgar grants al rol de la app.
+
+#### Cierre — pendientes
+- [x] hub → **online + systemd enabled** (actualizar inventario §2)
+- [ ] **Desfase código↔DB:** el checkout (`32acd4c`) es más viejo que `hub_db` (PurchaseRequest 25 cols + FK `aprobadorId` que el código no conoce). No rompe (Prisma ignora extras) pero conviene **actualizar el código de hub** a una versión al día con la DB. NO se resuelve con `db push` (borraría columnas). Tema aparte.
+- [ ] Vulnerabilidades npm audit (47 backend / 18 frontend) — higiene, no bloqueante.
 
 #### Aprendizajes para el redeploy (Fases 7–8) — se completan al ejecutar
 - [x] **hub SÍ tiene remote** (`AxiomaCloud/ProHub`, SSH) → redesplegable. El relevamiento de Fase 0 dio "sin remote" por `safe.directory`: **el redeploy debe setear `safe.directory` o clonar como el owner correcto**, no asumir "sin remote" cuando `git` falla por owner.
