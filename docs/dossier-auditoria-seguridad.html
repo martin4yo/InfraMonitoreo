@@ -574,8 +574,8 @@
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H06</span><span class="ftitle"><code>.env</code> con permisos laxos (777/664/644/755) en vez de 600</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">parcial</span></div>
-        <p class="fdesc">axioma 600 ✓, mini de dev-1 777→600 ✓; quedan <code>.env</code> de dev-1 y axiodemo por normalizar (Fase 4/5).</p>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-18</span> — los <code>.env</code> de app en los 3 servers en 600 con owner alineado al proceso (dev-1: mediflow→<code>root</code>, checkpoint→<code>axiomacloud</code>), con backup. Migrar mediflow/checkpoint a usuario dedicado sigue en Fase 5.</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
@@ -610,8 +610,8 @@
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H12</span><span class="ftitle">Deploy de <code>axio</code> con <code>origin</code> mal apuntado (a ProHub)</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 2 · integridad de deploy</span><span class="tag">axiodemo</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Un <code>deploy.sh</code> con credencial arreglada traería hub y rompería axio en prod. Re-apuntar <code>origin</code> a <code>axio.git</code> ANTES de volver a deployar; sin daño de datos (ProHub verificado no ensuciado).</p>
+        <div class="fmeta"><span class="tag cis">CIS 2 · integridad de deploy</span><span class="tag">axiodemo</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-18</span> — <code>origin</code> re-apuntado a <code>github-axio:AxiomaCloud/axio.git</code> vía deploy key SSH; <code>fetch</code> verifica que trae axio, no hub; working tree intacto. Reconciliar cambios locales + <code>pull</code> queda para Fase 6.</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
@@ -622,8 +622,8 @@
 
       <div class="find l"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H14</span><span class="ftitle"><code>stub_status</code> de nginx no devolvió métricas al probar</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 13</span><span class="tag">los 3 con nginx</span><span class="tag">Baja</span><span class="tag">verificar</span></div>
-        <p class="fdesc">El colector <code>go.d/nginx</code> podría no recibir datos. Confirmar que el server interno de stub_status entrega datos.</p>
+        <div class="fmeta"><span class="tag cis">CIS 13</span><span class="tag">los 3 con nginx</span><span class="tag">Baja</span></div>
+        <p class="fdesc"><span class="st ok">✓ verificado 2026-07-18</span> — falsa alarma: el colector apunta a <code>:8088</code> (no <code>:80</code>); el bloque stub_status existe en los 3 y el chart <code>nginx_local.connections</code> tiene datos vivos. Sin intervención en servers.</p>
       </div></div>
     </section>
 
@@ -647,7 +647,7 @@
     <footer class="doc">
       <p class="fnote"><strong>Naturaleza del documento.</strong> Todo lo aquí afirmado se deriva de evidencia versionada en el repo <code>InfraMonitoreo</code> (y su repo hermano <code>infra-secrets</code>). Cuando un control esperado no existe como documento o implementación, se marca explícitamente como gap. Nada fue inventado.</p>
       <p class="fnote"><strong>Fuentes primarias.</strong> <span class="mono">hardening.md · disaster-recovery-plan.md · drp-app-hub-drill.md · restore-drill-procedure.md · pgbackrest-setup.md · setup-netdata-cloud.md · estandar-despliegue.md · plan-estandarizacion-y-redespliegue.md · plan-trabajo-estandarizacion.md · nginx-anti-scanner.md · netdata/ · scripts/ · drill-history.csv</span></p>
-      <p class="fnote">Compilación 2026-07-18 (solo lectura, sin tocar servers) · revisión de deltas el mismo día, sin cambios de estado en H01–H14 · Responsable técnico mfourgeaux@axiomacloud.com</p>
+      <p class="fnote">Compilación 2026-07-18 · remediación Ola 1 aplicada el mismo día: H06, H12 y H14 pasan a corregido/verificado (ver <code>plan-remediacion-hallazgos.md</code>) · Responsable técnico mfourgeaux@axiomacloud.com</p>
     </footer>
 
   </main>

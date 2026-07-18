@@ -42,9 +42,9 @@ invasivos: no se ejecutan sin aprobación puntual.
 
 | Ola | # | Hallazgo (corto) | Server(s) | Sev | Riesgo interv. | Estado |
 |---|---|---|---|---|---|---|
-| **1 — Quick wins (no cortan servicio)** | H14 | `stub_status` nginx sin datos | los 3 con nginx | 🟢 | Muy bajo | [ ] |
-| 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [ ] |
-| 1 | H12 | `origin` de axio mal apuntado (a ProHub) | axiodemo | 🟡 | Muy bajo | [ ] |
+| **1 — Quick wins (no cortan servicio)** | H14 | `stub_status` nginx sin datos | los 3 con nginx | 🟢 | Muy bajo | [x] (2026-07-18) |
+| 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
+| 1 | H12 | `origin` de axio mal apuntado (a ProHub) | axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
 | **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [ ] |
 | 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [ ] |
 | **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [ ] |
@@ -98,13 +98,18 @@ Guardar copia previa del sitio tocado (`.bak-<ts>`) antes de editar.
 - `curl -s http://127.0.0.1/stub_status` en cada server → devuelve las 4 líneas de stub_status.
 - En Netdata Cloud (o `curl 127.0.0.1:19999/api/v1/data?chart=nginx.connections`): chart `nginx.*` con datos.
 
+> **RESUELTO (2026-07-18) — no requirió intervención.** El diagnóstico reveló que la premisa del
+> plan era incorrecta: el colector NO apunta a `:80` sino a **`:8088`**, donde el bloque
+> `stub_status` ya existe en `/etc/nginx/conf.d/netdata_stub_status.conf` en los 3 servers y
+> responde. Netdata recibe el chart **`nginx_local.connections`** con datos vivos (axioma 9.57,
+> dev-1 3.97, axiodemo 2.00). Solo se corrigió el comentario obsoleto (`:80`→`:8088`) en
+> `netdata/go.d/nginx.conf` (repo, sin tocar servers).
+
 **Sub-pasos:**
-- [ ] Diagnosticar stub_status en axioma (lectura)
-- [ ] Diagnosticar stub_status en axiodemo (lectura)
-- [ ] Diagnosticar stub_status en dev-1 (lectura)
-- [ ] Determinar causa (falta bloque / URL colector / allow-deny) y reflejar fix en el repo
-- [ ] ⚠ Aplicar fix nginx (`nginx -t` + reload) en cada server que lo necesite — **OK explícito**
-- [ ] Verificar `go.d/nginx` recibe datos en los 3 (curl + chart en Cloud)
+- [x] Diagnosticar stub_status en axioma / axiodemo / dev-1 (lectura) — colector en `:8088`, responde
+- [x] Determinar causa → **ninguna**: bloque presente y colector OK; solo comentario obsoleto en repo
+- [x] Corregir comentario `:80`→`:8088` en `netdata/go.d/nginx.conf` (repo, no invasivo)
+- [x] Verificar datos: chart `nginx_local.connections` con valores en los 3
 
 ---
 
@@ -141,12 +146,20 @@ No hace falta reiniciar la app (el descriptor sigue abierto).
 - `sudo -n find /var/www /opt -maxdepth 3 -name '.env' -printf '%m %u:%g %p\n'` en dev-1 y axiodemo → **todos `600`** y owner == usuario del proceso.
 - Boot test de al menos una app tocada por server: reiniciar su servicio y confirmar que arranca y lee el `.env`.
 
+> **HECHO (2026-07-18).** Con backup `.bak-<ts>` de cada archivo. **axiodemo** (owner ya OK):
+> `axio/.env` 664→600, `axio-ml-service/.env` 664→600 (`axio/backend/.env` ya estaba 600).
+> **dev-1**: `elore/.env` 755→600 (owner OK); `mediflow/backend/.env` 644→600 con
+> `chown root:root` (el proceso corre como root vía PM2 de root); `checkpoint-web/.env` 644→600
+> con `chown axiomacloud` (el proceso corre como axiomacloud). Verificado: los 5 en 600, cada
+> owner LEE su `.env` (`sudo -u <owner> test -r` OK), apps siguen vivas (no se reinició nada;
+> descriptor abierto). Migrar mediflow/checkpoint a usuario dedicado sigue pendiente en Fase 5
+> (no es de esta ola).
+
 **Sub-pasos:**
-- [ ] Inventariar `.env` (perms+owner+proceso lector) en dev-1 (lectura)
-- [ ] Inventariar `.env` (perms+owner+proceso lector) en axiodemo (lectura)
-- [ ] ⚠ Normalizar owner (si hace falta) + `chmod 600` en dev-1 — **OK explícito**
-- [ ] ⚠ Normalizar owner (si hace falta) + `chmod 600` en axiodemo — **OK explícito**
-- [ ] Verificar 600 en todos + boot test de una app por server
+- [x] Inventariar `.env` (perms+owner+proceso lector) en dev-1 y axiodemo (lectura)
+- [x] Normalizar owner (mediflow→root, checkpoint→axiomacloud) + `chmod 600` en dev-1
+- [x] `chmod 600` en axiodemo (owner ya OK)
+- [x] Verificar 600 en los 5 + lectura efectiva por owner + apps vivas
 
 ---
 
@@ -190,12 +203,20 @@ exacta en el paso 1 antes de cambiarla). El working tree no se toca → rollback
   (spot-check: `git -C /var/www/axio cat-file -e origin/main:ml-service/main.py` existe; el marcador de
   hub `pricing_hub.html` NO).
 
+> **HECHO (2026-07-18).** Corrección respecto del plan: se apuntó a **SSH vía alias**, no HTTPS.
+> El diagnóstico mostró que `axioapp` no tiene credencial HTTPS (fetch pedía usuario) pero **sí**
+> una deploy key SSH funcional (`~/.ssh/github-axio`, alias `github-axio` en su ssh config) que
+> autentica en GitHub. Origin final: **`github-axio:AxiomaCloud/axio.git`**. `ls-remote`/`fetch`
+> contra el remoto REAL OK (SHA `afa7461`), spot-check confirma árbol de axio (`ml-service/main.py`
+> existe), working tree intacto (los 3 cambios locales siguen; queda `behind 5` para Fase 6).
+> Rollback ref: `https://github.com/AxiomaCloud/ProHub.git`. NO se corrió `pull`/`deploy.sh`.
+
 **Sub-pasos:**
-- [ ] Confirmar estado actual del remote + HEAD + cambios locales (lectura)
-- [ ] ⚠ `remote set-url origin → axio.git` como `axioapp` — **OK explícito**
-- [ ] `git fetch origin` — confirma deploy key OK y que trae axio (no hub)
-- [ ] Verificar `remote get-url` + spot-check del árbol remoto (axio ≠ hub)
-- [ ] Registrar que la reconciliación de cambios locales + `pull` queda para Fase 6 (no acá)
+- [x] Confirmar estado actual del remote (ProHub HTTPS) + HEAD `22eaff3` + 3 cambios locales (lectura)
+- [x] `remote set-url origin → github-axio:AxiomaCloud/axio.git` (SSH, no HTTPS) como `axioapp`
+- [x] `ls-remote`/`fetch origin` — deploy key SSH OK, trae axio (no hub)
+- [x] Verificar `remote get-url` + spot-check árbol remoto (axio ≠ hub) + working tree intacto
+- [x] Registrado: reconciliación de cambios locales + `pull` queda para Fase 6 (no acá)
 
 ---
 
@@ -647,6 +668,9 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | Fecha | Hallazgo | Acción | Resultado |
 |---|---|---|---|
 | 2026-07-18 | — | Redacción del plan de remediación (solo escritura de doc, sin tocar servers) | ✅ 10 hallazgos técnicos en 4 olas de riesgo |
+| 2026-07-18 | H14 | Diagnóstico: colector nginx apunta a `:8088` (no `:80`), stub_status ya presente y con datos en los 3 | ✅ verde — sin intervención; solo comentario `:80`→`:8088` corregido en repo |
+| 2026-07-18 | H12 | `remote set-url origin` de axio → `github-axio:AxiomaCloud/axio.git` (SSH, deploy key funcional; el plan asumía HTTPS/no había credencial) + fetch de verificación | ✅ verde — trae axio (no hub), working tree intacto, sin pull |
+| 2026-07-18 | H06 | `.env` → 600 con backup: axiodemo x2 (owner OK), dev-1 x3 (elore directo; mediflow `chown root`; checkpoint `chown axiomacloud`) | ✅ verde — 5 en 600, owners leen OK, apps vivas |
 
 ---
 
