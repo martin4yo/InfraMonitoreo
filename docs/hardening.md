@@ -55,7 +55,7 @@ Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-f
 | # | Hallazgo | axioma | clubix | axiodemo | axioma-drp | dev-1 |
 |---|----------|--------|--------|----------|------------|-------|
 | 1 | pg_hba / listen | 🔴 `0.0.0.0/0 md5`, salvado por bind localhost | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
-| 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | 🟡 ufw NO instalado (casi nada escucha) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
+| 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
 | 3 | SSH root/password | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` (homologado) | ✅ root+pass `no` (fix 2026-07-17) |
 | 4 | App en `0.0.0.0` | 🟡 `:8087` | 🟡 19999, 25 | 🟡 `:5300`, 19999 | 🟢 solo sshd | 🟡 **firewall tapa 19999/631/3000/5000/8086/8087/8089** (fix 2026-07-17); snmp 161 acotado a dattaweb. Bind 0.0.0.0 sigue (defensa por fw); rebindear a loopback en Fase 4 |
 | 5 | `.env` laxos | ✅ 600 | 🟢 600 | 🟡 `axio*/.env` 664 | ⬜ sin apps | 🟡 mini **777→600 ✅ (fix 2026-07-17)**; quedan varios 644/664/755 |
@@ -83,9 +83,14 @@ a los secretos). **Pendientes 🔴 tras el fix SSH**: 3 `.env` de mini en 777, f
 Ubuntu 22.04, solo SSH escucha. Sin Postgres/nginx/apps/pgBackRest/Netdata. SSH ya homologado. **Hallazgo
 🔴**: usuario `linuxadmin` (provisioning 2022, ajeno a Axioma) con password activa + sudo + llave ajena
 `mfourgeaux@KEYSOFT-I7` → **password bloqueada** (`passwd -l`, 2026-07-17); usuario+sudo conservados para
-emergencia (solo entra por llave). Pendientes menores: fail2ban caído (jail apunta a log inexistente, usar
-`backend=systemd`), `ubuntu` NOPASSWD del cloud-init (password ya bloqueada), **disco 12 G (3.6 G libres) —
-ampliar antes de sumarlo a backups DRP**. Para integrar: instalar Netdata (+claim), pgBackRest, ufw. Confirmar rol DRP.
+emergencia (solo entra por llave). ✅ **ufw instalado y activo** (2026-07-17): default-deny, allow 22/80/443.
+**Rol definido (2026-07-17): banco de pruebas de DRP _por aplicación, de a una_** — NO réplica de infra completa.
+✅ **Disco ampliado (2026-07-17)**: el VPS se agrandó y se propagó la cadena LVM online (growpart sda3 →
+pvresize → lvextend +100%FREE → resize2fs ext4, sin reboot). `/` pasó de **12 G a 64 G** (53 G libres).
+Backup de la tabla de particiones en `/root/sda-parttable.bak-*.sfdisk`. Queda ~2 G sin asignar en el VG
+(remanente por redondeo de extents; disponible para un LV aparte de `/var/lib/postgresql` si hiciera falta).
+Pendientes menores: fail2ban caído (jail apunta a log inexistente, usar `backend=systemd`), `ubuntu` NOPASSWD
+del cloud-init (password ya bloqueada). Para integrar: Netdata (+claim) y pgBackRest cuando se arme cada prueba.
 
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.
