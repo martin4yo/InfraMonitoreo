@@ -93,8 +93,10 @@ Backup de la tabla de particiones en `/root/sda-parttable.bak-*.sfdisk`. Queda ~
 mismo Space/Room de Netdata Cloud, ACLK conectado, reportando. `:19999` no expuesto en ufw (reporta saliente).
 Faltan los colectores específicos (postgres/nginx/pgBackRest) — se suman con `scripts/20-deploy-configs.sh`
 cuando haya apps para cada prueba de restore.
-Pendientes menores: fail2ban caído (jail apunta a log inexistente, usar `backend=systemd`), `ubuntu` NOPASSWD
-del cloud-init (password ya bloqueada). Para integrar: pgBackRest cuando se arme cada prueba.
+✅ **fail2ban arreglado (2026-07-17)**: el jail sshd estaba caído (buscaba `/var/log/auth.log` inexistente,
+el server usa journald). Fix: `jail.local` con `backend = systemd` + jail sshd puerto 22 + `ignoreip` con las
+5 IPs de la infra. Config test OK, servicio active, leyendo del journal. SSH con rate-limiting de nuevo.
+Pendiente menor: `ubuntu` NOPASSWD del cloud-init (password ya bloqueada). Para integrar: pgBackRest cuando se arme cada prueba.
 
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.
