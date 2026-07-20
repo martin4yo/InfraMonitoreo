@@ -14,7 +14,7 @@
 | 3 | SSH: `PermitRootLogin yes` (en `sshd_config.d/custom.conf`) + `PasswordAuthentication yes` | 🔴 | ✅ **corregido 2026-07-17** |
 | 4 | Puertos de app en `0.0.0.0` en vez de `127.0.0.1` (`:8087` parse-front) | 🟡 | pendiente |
 | 5 | `.env` con permisos laxos (777/644/664) en vez de 600 | 🟡 | ✅ **corregido 2026-07-17** |
-| 6 | Credenciales R2 en texto plano en `pgbackrest.conf` (+ expuestas en sesión) | 🟡 | pendiente (rotar + SOPS) |
+| 6 | Credenciales R2 en texto plano en `pgbackrest.conf` (+ expuestas en sesión) | 🟡 | ✅ cerrado (2026-07-19): token rotado + `.bak` con creds purgados |
 
 ## Bien (no tocar)
 - Postgres escucha solo en `127.0.0.1:5432` (mitiga el #1 mientras no cambie `listen_addresses`).
@@ -46,7 +46,11 @@ Pendiente: axiodemo ya tenía ufw (no requiere acción); auditar/configurar fire
 Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-front, elore, evolution). Todos pasados a `chmod 600` el 2026-07-17. Pendiente aparte: normalizar owner de los `.env` de mini (hoy `axiomacloud`) en Fase 5.
 
 ### 6. Credenciales R2 🟡 → ✅ TOKEN ROTADO (2026-07-17)
-`repo2-s3-key-secret` + `repo2-cipher-pass` en texto plano en `/etc/pgbackrest/pgbackrest.conf`; además se expusieron en una sesión el 2026-07-17. **Hecho**: rotado el API token R2 (viejo `a8790e48…` borrado en Cloudflare, nuevo `b47676fd…` aplicado en los **5 archivos** con backup), verificado con `pgbackrest check` en las 4 stanzas; `cipher-pass` conservado; credenciales cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). Ver `pgbackrest-setup.md`. **Pendiente menor**: las creds siguen en texto plano en los `.conf` que lee pgBackRest (protegidas por 640 + firewall).
+`repo2-s3-key-secret` + `repo2-cipher-pass` en texto plano en `/etc/pgbackrest/pgbackrest.conf`; además se expusieron en una sesión el 2026-07-17. **Hecho**: rotado el API token R2 (viejo `a8790e48…` borrado en Cloudflare, nuevo `b47676fd…` aplicado en los **5 archivos** con backup), verificado con `pgbackrest check` en las 4 stanzas; `cipher-pass` conservado; credenciales cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). Ver `pgbackrest-setup.md`. **Cerrado (2026-07-19, H03 del plan de remediación).** Se evaluaron las 3 opciones (mantener+endurecer / archivo dedicado `600` vía `config-include-path` / variables `PGBACKREST_*`) y se eligió **mantener en el `.conf` + endurecer**: pgBackRest siempre necesita el secreto en claro en ejecución, así que mover a otro archivo owner-only es ganancia marginal frente a editar 5 configs productivas, y las env vars serían **peores** (legibles en `/proc/<pid>/environ`).
+
+La superficie real no eran los `.conf` (ya en `640`, grupos de un solo miembro, no versionados) sino **4 archivos `.bak` con las claves S3 pre-rotación** — incluidos los backups que dejó la propia rotación del 17-jul. Se verificó por hash que su `repo2-cipher-pass` era **idéntico al vivo** (el cipher NO se rota; perderlo haría irrecuperables los backups R2), se respaldaron en `/root/pgbackrest-bak-archive/*.tar.gz` (`600` root-only) y se borraron. Resultado: **0 `.bak` en los 5 servers**, `.conf` en `640`, `pgbackrest check` OK en las 4 stanzas (repo1+repo2).
+
+**Límite aceptado y documentado:** las creds siguen en texto plano en los `.conf` que lee pgBackRest (protegidas por `640` + owner + firewall); la fuente de verdad cifrada es SOPS. **Regla operativa:** al rotar creds, no dejar `.bak` con el valor viejo.
 
 ---
 
@@ -59,7 +63,7 @@ Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-f
 | 3 | SSH root/password | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` (homologado) | ✅ root+pass `no` (fix 2026-07-17) |
 | 4 | App en `0.0.0.0` | 🟡 `:8087` | 🟡 19999, 25 | 🟡 `:5300`, 19999 | 🟢 solo sshd | 🟡 **firewall tapa 19999/631/3000/5000/8086/8087/8089** (fix 2026-07-17); snmp 161 acotado a dattaweb. Bind 0.0.0.0 sigue (defensa por fw); rebindear a loopback en Fase 4 |
 | 5 | `.env` laxos | ✅ 600 | 🟢 600 | 🟡 `axio*/.env` 664 | ⬜ sin apps | 🟡 mini **777→600 ✅ (fix 2026-07-17)**; quedan varios 644/664/755 |
-| 6 | pgBackRest R2 claro | ✅ token rotado | ✅ | ✅ | ⬜ sin pgBackRest | ✅ token rotado (perms 640 OK) |
+| 6 | pgBackRest R2 claro | ✅ rotado + `.bak` purgados | ✅ | ✅ | ⬜ sin pgBackRest | ✅ rotado + `.bak` purgados (640 OK) |
 
 Puerto SSH: axioma 22+5408 · clubix **2222** · axiodemo 22 · axioma-drp 22 · **dev-1 22+5782**.
 

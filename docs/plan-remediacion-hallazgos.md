@@ -48,7 +48,7 @@ invasivos: no se ejecutan sin aprobación puntual.
 | **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [x] (2026-07-18) |
 | 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [x] (2026-07-19) |
 | **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [!] bloqueado — coordinar con dattaweb |
-| 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [ ] |
+| 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [x] (2026-07-19) |
 | **4 — Invasivos sobre apps/DB en prod (⚠ OK explícito)** | H04 | Apps escuchando en `0.0.0.0` → loopback | axioma, dev-1, axiodemo | 🟡 | Medio-Alto | [ ] |
 | 4 | H01 | `pg_hba` `0.0.0.0/0 md5` → rangos + scram | axioma | 🔴→🟡 | Alto | [ ] |
 | 4 | H13 | `npm audit` hub (47 back / 18 front) + higiene | apps (axioma) | 🟡 | Alto | [ ] |
@@ -491,14 +491,45 @@ va de a uno con verificación, un fallo se contiene en ese único server.
   (`grep` sobre lo que corresponda, enmascarado).
 - Un backup incremental real a repo2 corre sin error (o esperar al cron y ver el `pgbackrest info` de repo2).
 
+> **HECHO (2026-07-19) — mecanismo (a) endurecido + limpieza de `.bak`; sin tocar ningún `.conf` vivo.**
+>
+> **El relevamiento corrigió dos premisas del plan:**
+> 1. **La postura de los `.conf` ya era correcta**, no "creds expuestas": los 5 están en `640` con owner
+>    correcto (`pgbackrest:pgbackrest` o `postgres:postgres`; drp `root:postgres`) y **los grupos tienen
+>    un solo miembro**, así que ningún usuario sin `sudo` los lee. Ninguno está versionado en git.
+> 2. **La superficie real estaba en otro lado: 4 archivos `.bak` con credenciales en claro** que el
+>    inventario de "5 archivos" del plan no contemplaba (axioma, clubix, axiodemo y dev-1 ×2).
+>
+> **Por qué (a) y no (b)/(c)** (ambas verificadas como viables en 2.58 — `config-include-path` y el
+> prefijo `PGBACKREST_` existen en el binario): pgBackRest **siempre** necesita el secreto en claro en
+> ejecución, así que (b) solo lo mueve de un archivo `640` owner-only a uno `600` owner-only —
+> ganancia marginal a cambio de editar 5 configs de backup productivas. (c) es **peor que el estado
+> actual**: las creds por entorno quedan legibles en `/proc/<pid>/environ`. La mejora real estaba en
+> eliminar los `.bak`.
+>
+> **Verificación previa al borrado (clave):** los `.bak-2026071[78]` contenían las claves S3
+> **pre-rotación** (distintas del vivo), pero se comparó hash por clave y el **`repo2-cipher-pass` era
+> IDÉNTICO al vivo** en los 4 → borrarlos no arriesgaba el cipher (que NO se rota: si se pierde, los
+> backups R2 quedan irrecuperables). Los 2 `.bak` de mayo en dev-1 **no tenían creds** (el `grep -l`
+> inicial los contó por otra línea) y se limpiaron por higiene.
+>
+> **Ejecución:** respaldo previo de los 4 en `/root/pgbackrest-bak-archive/creds-bak-20260719-2030.tar.gz`
+> (`600`, root-only) en cada server → borrado → **`pgbackrest check` de las 4 stanzas
+> `completed successfully` en repo1 y repo2**. Estado final: 0 `.bak` en los 5 servers, `.conf` en `640`.
+>
+> **Límite documentado (aceptado):** pgBackRest lee su config en claro y no consume SOPS. La fuente de
+> verdad cifrada sigue siendo `infra-secrets/env/pgbackrest/repo2-r2.env`; los `.conf` son copias
+> operativas protegidas por permisos + firewall. Todo cambio futuro de creds se hace desde SOPS y
+> **sin dejar `.bak` con el valor viejo** (usar el archivo de archivo `600` de root si hace falta respaldo).
+
 **Sub-pasos:**
-- [ ] Relevar los 5 archivos + permisos (lectura, **enmascarando**)
-- [ ] Decidir mecanismo (a/b/c) con el usuario y documentarlo
-- [ ] ⚠ Aplicar en axiodemo → `check` — **OK explícito**
-- [ ] ⚠ Aplicar en axioma → `check` — **OK explícito**
-- [ ] ⚠ Aplicar en clubix → `check` — **OK explícito**
-- [ ] ⚠ Aplicar en dev-1 (2 archivos, último) → `check` de las 4 stanzas — **OK explícito**
-- [ ] Verificar backup R2 real OK + secreto fuera del `.conf` versionable en los 5
+- [x] Relevar los 5 archivos + permisos (lectura, **enmascarando**) → ya en `640`+owner correcto, no versionados
+- [x] Decidir mecanismo (a/b/c) con el usuario y documentarlo → **(a)** + limpieza de `.bak` (b/c descartadas con fundamento)
+- [x] Verificar que los `.bak` no tienen el `cipher-pass` distinto al vivo (hash por clave) antes de borrar
+- [x] Respaldar los 4 `.bak` en tar `600` root-only por server
+- [x] Borrar `.bak` con creds en axioma / clubix / axiodemo / dev-1 (×2) + 2 residuos de mayo
+- [x] Verificar `pgbackrest check` de las 4 stanzas (repo1+repo2) → `completed successfully`
+- [x] Verificar 0 `.bak` restantes + `.conf` en `640` en los 5 servers
 
 ---
 
@@ -728,6 +759,7 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-18 | H08 | Diagnóstico: monitoreo pgBackRest **ya desplegado 26-May** en dev-1 (colector `pgbackrest-collect.py` + cron 15min + health.d + statsd.d), charts con datos, alarmas en CLEAR. Solo se reconcilió el colector del repo (versión multi-repo del server, md5-idéntica) — sin tocar dev-1 | ✅ verde — ya estaba andando; repo puesto al día |
 | 2026-07-19 | H07 | FAIL sistemático en PG14 diagnosticado como **bug del drill, no de los backups** (pg_hba `scram` copiado del cluster local → rechazo por auth; + chequeo de conectividad sin esperar el replay). Arreglado `70-restore-drill.sh` y re-corrido | ✅ verde — las 3 stanzas PASS (585/178/34 tablas, WAL al día); 1ª corrida OK de AxiomaCloudProd y clubix |
 | 2026-07-19 | H09 | Relevamiento (lectura) en dev-1: community `public` pero ya acotada por `com2sec` a 2 IPs dattaweb; bind `0.0.0.0:161`. `tcpdump` prueba que **dattaweb poletea cada ~1s y snmpd responde** | ⏸ bloqueado — Camino A descartado; Camino B exige coordinar la nueva community con el proveedor |
+| 2026-07-19 | H03 | Relevamiento mostró los `.conf` ya en `640`+owner correcto (no versionados) y la superficie real en **4 `.bak` con creds pre-rotación**. Mecanismo **(a)**: verificado que el `cipher-pass` de los `.bak` era idéntico al vivo → respaldo en tar `600` root-only → borrados los 4 (+2 residuos sin creds) | ✅ verde — 0 `.bak` en los 5 servers, `check` de las 4 stanzas OK (repo1+repo2); ningún `.conf` vivo tocado |
 
 ---
 
