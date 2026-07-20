@@ -64,7 +64,9 @@ Todo lo que sea **solo lectura** (relevar, mapear, verificar estado, `pgbackrest
 
 **Fuente de verdad:** `docs/hardening.md` (auditoría de 6 puntos por server + fixes aplicados + tabla comparativa de los 5). Auditar es read-only (SSH efectivo, `ss`, `pg_hba`, permisos) → sin permiso; **aplicar fixes es invasivo → regla de oro**. Un error en SSH/firewall/pg_hba deja el server **inaccesible**.
 
-**Estado (2026-07-17):** los 3 críticos originales cerrados en toda la infra → **SSH sin root ni password** (solo llave, los 5), **firewall ufw default-deny** (los 5), **credenciales R2 rotadas**. Pendientes menores: pg_hba de axioma a nivel config (ya mitigado por fw); defensa en profundidad (rebindear servicios a loopback, `.env` con permisos flojos) → Fase 4.
+**Estado (2026-07-20):** los 3 críticos originales cerrados en toda la infra → **SSH sin root ni password** (solo llave, los 5), **firewall ufw default-deny** (los 5), **credenciales R2 rotadas**. Sobre el dossier de auditoría (14 hallazgos técnicos, tracker en `docs/plan-remediacion-hallazgos.md`): **7 en verde** (H14, H06 parcial, H12, H08, H07, H03, H13), **H04 parcial** (parse axioma + CUPS + netdata en loopback; las 5 apps Next **bloqueadas** por el patrón `-H`/redirects), **H09 bloqueado** (snmpd: dattaweb poletea, requiere coordinar la community con el proveedor), y pendientes **H01** (pg_hba axioma), **H11** (axio-ml a usuario dedicado). Ver el tracker para el detalle y las excepciones aceptadas.
+
+**Dos hallazgos de clase sumados el 2026-07-20** (`docs/hardening.md` §9 y §10): **credenciales en texto plano dentro de los LOGS** de aplicación (causa: `console.log` que vuelcan `req.body`/objetos de settings; el fix es redacción en el logger, en el repo de la app — rotar el log NO lo arregla), y **ausencia total de rotación de logs**, ya resuelta con logrotate nativo (`logrotate/` en el repo).
 
 **Los 6 puntos que se auditan por server:** (1) `pg_hba.conf` amplio (`0.0.0.0/0`) + md5 vs scram; (2) firewall ausente; (3) SSH root/password; (4) puertos de app en `0.0.0.0` (deberían loopback tras nginx); (5) `.env` con permisos laxos (deben ser 600 owner-app); (6) credenciales pgBackRest R2 en texto plano.
 
@@ -80,7 +82,27 @@ Todo lo que sea **solo lectura** (relevar, mapear, verificar estado, `pgbackrest
 4. **Verificar desde afuera:** SSH nuevo (cada puerto) + web (`curl -k https://<ip>/`) + que los puertos que debían cerrarse estén bloqueados (`/dev/tcp/<ip>/<port>`) + en dev-1, `pgbackrest check` en las 4 stanzas (el flujo de backups NO se puede romper).
 5. **Allowlist típica:** SSH (el/los puerto/s reales), 80/443. Servicios de monitoreo del proveedor Contabo (snmpd `:161`, collectd) son **salientes** o acotados → no romperlos (snmp: allow solo desde las IPs dattaweb `200.58.112.191`/`200.58.109.50`). netdata `:19999`, postfix `:25` (relay-only), CUPS `:631`, apps Node crudas → **bloquear** (van por nginx/loopback igual). Las 4 IPs de infra ya están en `ignoreip` de fail2ban.
 
-**Otros fixes de la sesión (referencia):** `.env` laxos → `chmod 600` (confirmar que el owner coincide con el proceso que lo lee); usuarios de provisioning ajenos (`linuxadmin` en drp, password+sudo+llave de otro) → `passwd -l` conserva el usuario pero mata la fuerza bruta; fail2ban caído por buscar `/var/log/auth.log` inexistente → `jail.local` con `backend = systemd` (Ubuntu cloud usa journald); ampliar disco LVM online → `growpart` → `pvresize` → `lvextend` → `resize2fs` (ext4, sin reboot; backup `sfdisk -d` antes).
+**Otros fixes de la sesión (referencia):** `.env` laxos → `chmod 600` (**ver §"Verificación efectiva" abajo — el chequeo ingenuo causó un incidente en prod**); usuarios de provisioning ajenos (`linuxadmin` en drp, password+sudo+llave de otro) → `passwd -l` conserva el usuario pero mata la fuerza bruta; fail2ban caído por buscar `/var/log/auth.log` inexistente → `jail.local` con `backend = systemd` (Ubuntu cloud usa journald); ampliar disco LVM online → `growpart` → `pvresize` → `lvextend` → `resize2fs` (ext4, sin reboot; backup `sfdisk -d` antes).
+
+## Verificación efectiva — el estado real, no el aparente
+
+> Sección destilada de errores que se pagaron caro (2026-07-20). El patrón común: **verificar contra lo que el sistema hace de verdad, no contra lo que la convención sugiere**. Un chequeo que "da OK" por el motivo equivocado es peor que no chequear.
+
+**Permisos de `.env` → comparar con el usuario CONFIGURADO, no con el proceso vivo.** Un `chmod`/`chown` **no rompe un proceso corriendo** (el descriptor ya está abierto): rompe el **próximo arranque**. "La app sigue viva" no prueba nada y la bomba queda latente días. Referencia: `pm2 jlist` del PM2_HOME correcto y `User=` de la unit; validar con `sudo -u <usuario-configurado> test -r <.env>`. Con `640`, revisar además `getent group <grupo>` (miembros reales). **Y hacerlo en TODOS los servers donde exista la app** — una app puede correr con usuarios distintos en cada server. *Costo del error: 500 en producción (mini axioma) + 3 días de crash loop invisible (checkpoint-web, 108k reinicios, ~0.6 de load).*
+
+**Crash loop → `restart_time` estable tras 60 s.** Que PM2 diga `online` no alcanza: un crash loop también reporta `online` entre reinicios. Y `restart_time`/`pm_uptime` describen el **proceso actual**, no la historia (un `pm2 delete`+`start` reinicia el contador) → nunca usarlos como prueba de que algo "nunca falló".
+
+**Logs de PM2 → `~/.pm2/logs/*.log` NO es donde escriben las apps.** El stdout real suele ir a **`~/.pm2/pm2.log`**, un nivel arriba. Comprobar siempre con **`/proc/<pid>/fd/1`** a dónde apunta el descriptor. *Costo del error: un `pm2.log` de 2,07 GB sin rotar en dev-1 — el mayor de la infra — mientras los archivos "inventariados" estaban vacíos.*
+
+**`copytruncate` → un archivo en 0 bytes NO prueba que falló.** Puede ser que la app simplemente no emita stdout. La prueba concluyente es escribir al descriptor: `echo TEST >> /proc/<pid>/fd/1` y ver que crece. Con el criterio ingenuo se revierten rotaciones correctas y se reinician apps sanas.
+
+**Health HTTP → verificar el `Location` de los 3xx, no solo el código.** Un `curl` que devuelve 307 puede estar redirigiendo a `https://localhost:<puerto>` con el login roto. *Costo del error: casi damos por verde un rebind que rompía el login de elore en producción.*
+
+**PM2_HOME → no asumir que está en el home del usuario.** `parseapp` en axioma lo tiene en `/var/www/parse/.pm2`. Un `pm2 save` al lugar equivocado falla con `EACCES` y **deja sin rollback**. Buscar los `dump.pm2` reales del filesystem, no adivinar. Y tras migrar a un usuario dedicado, correr los comandos PM2 **desde un cwd neutro** (`/tmp`): parado en el home del usuario viejo, `pm2 start` falla con `spawn EACCES`, error engañoso que parece del binario de node.
+
+**Migrar owner → `chown -R` no cubre todo.** No sigue symlinks (`chown -h` aparte, típicamente `node_modules/.bin/*`) y **no alcanza los paths de log declarados en el ecosystem** que viven fuera de `/var/www` (p. ej. `/var/log/<app>`): sin ellos, PM2 no puede escribir y la app no arranca. Además, las rutas que nginx sirve como estáticos necesitan **`755`** (traverse de `www-data`), no `750`, o se cae el sitio.
+
+**Antes de dar un hallazgo por cerrado, preguntarse qué NO se miró.** Varias premisas de los planes resultaron falsas al verificarlas en vivo (colector nginx en `:8088` no `:80`; monitoreo pgBackRest ya desplegado; los `proxy_pass` ya en loopback; `-H` que no aplica a 5 de 12 apps). **Relevar antes de ejecutar cambia el plan más veces de las que lo confirma.**
 
 ## Secretos (SOPS + age) — transversal
 
