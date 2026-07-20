@@ -86,9 +86,48 @@ Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-f
 | axioma | hub, parse, elore, evolution-api | varios | 600 | `<app>app` | idem | ✅ |
 | clubix / axiodemo | clubix, axio | varios | 600 | `<app>app` | idem | ✅ |
 
-**Pendientes de este hallazgo:** (1) `axio/.env` 664 → 600 en dev-1 (**prioridad**, sin proceso corriendo → sin riesgo); (2) las 2 bombas latentes de mini en axioma; (3) `chown miniapp:miniapp` + 600 del backend de mini; (4) mediflow: sacar de root (dev-1) y normalizar grupo (axioma).
+**Pendientes de este hallazgo:** ~~(1) `axio/.env` 664 → 600 en dev-1~~ ✅ **hecho (2026-07-20)** — resultaron **7 archivos** en `664`, no 2 (incluidos `.env.example` de 2588 y 2037 bytes, demasiado grandes para plantillas vacías) → todos a `600 axioapp:axioapp`, con respaldo en `/root/env-bak/` (`700` root-only). Control negativo verificado: `sudo -u hubapp test -r` → **NO_LEE** (antes, con `664`, lo leían los 8 usuarios de apps de dev-1). Sin riesgo de bomba: el owner **ya era** el usuario configurado. Quedan: (2) las 2 bombas latentes de mini en axioma; (3) `chown miniapp:miniapp` + 600 del backend de mini; (4) mediflow: sacar de root (dev-1) y normalizar grupo (axioma); (5) `ecosystem.config.js` de axio en dev-1 sigue en `664`.
 
-**Hallazgo mayor asociado — directorios en `777`.** `/var/www/mini` y subdirectorios están en `drwxrwxrwx` en **axioma y dev-1**. El `.env` en 600/640 protege el *contenido*, pero **manda el permiso de escritura del directorio**: cualquier usuario local puede **borrar o sustituir** ese `.env`. Hay además `.env.local`/`.env.production`/`.env.example` en 777 y archivos de negocio sueltos (`IIBB_Ventas.txt`, `.xlsx` de comprobantes, `consola.log`). **Esto pesa más que el hallazgo original.** Normalizar a `750 <app>app:<app>app` + `.env.*` a 600.
+### 8. `axio-db-agent` — dónde vive realmente y su `.env` en `644` (2026-07-20)
+
+Relevado a raíz de una pregunta del usuario: el **db-agent** provee a axiodemo los diccionarios de datos y ejecuta queries contra las apps tenant.
+
+**Arquitectura real (corrige la suposición de que se instala "en los servidores de las aplicaciones"):** hay **un solo agente**, en **axioma**, en `/opt/axio-db-agent` — **NO** en `/var/www/axio/db-agent`. Corre por `axio-db-agent.service` (`enabled`+`active`, `User=axioapp`, con hardening `ProtectSystem=strict`/`NoNewPrivileges`/`ProtectHome`), **uptime desde 2026-06-27 sin reiniciar**. Bindea **`127.0.0.1:3005`** y se publica vía nginx en `https://prd.axiomacloud.com/axio-agent` → **no requiere regla ufw para 3005** (el README sugiere abrirlo; el despliegue real eligió el proxy HTTPS, más seguro). Auth por header `x-agent-key`; `curl 127.0.0.1:3005/health` → 401 (vivo). Cubre **4 apps configuradas** (`clubix`, `mini`, `alvera`, `parse`) con `APPS=clubix, mini, alvera` habilitadas. Registrado en la tabla `hub_agents` de `axio_ml` (axiodemo) con `status: online` y heartbeat al día — nombre `"Servidor Clubix"`, **engañoso: el agente corre en axioma**. En clubix y axiodemo **no existe** el agente.
+
+🔴 **Hallazgo → ✅ CERRADO (2026-07-20).** `/opt/axio-db-agent/.env` estaba en **`644`** (world-readable) con **4 `DATABASE_URL` de producción + 2 API keys**. Mismo agujero que el de dev-1 pero con las credenciales de las bases reales. **Pasado a `600 axioapp:axioapp`** (`.env.example` de `664` a `640`), con respaldo en `/root/env-bak/`.
+
+Aplicada la **regla corregida**: se comparó el `User=axioapp` **declarado en la unit systemd** contra el owner del archivo **antes** de tocar — coinciden, por eso no había bomba latente (en mini era al revés). Refuerzos verificados: la unit **no usa `EnvironmentFile=`** (el `.env` lo lee el propio proceso Node vía `dotenv`, ya como `axioapp`), el sandbox `ProtectSystem=strict` tiene `ReadWritePaths=/opt/axio-db-agent`, y **`getent group axioapp` está vacío** → el `644` no daba acceso por grupo a nadie: el bit `other` era el único acceso real, y se lo daba a **todo usuario del server**. Control negativo: `hubapp` y `www-data` → NO_LEE. Integración intacta (heartbeat 18s después del cambio, `error_count=0`).
+
+**Rename `"Servidor Clubix"` → `"Agente Axioma"` (2026-07-20).** El rótulo era engañoso (el agente corre en axioma). Datos del relevamiento previo, útiles para futuros cambios de config del agente:
+- **El upsert contra el hub es por `agent_url`**, NO por `server_name` (`ml-service/main.py:2343`) → renombrar es seguro, no duplica la fila. ⚠ **Tocar `AGENT_PUBLIC_URL` sí crearía un registro nuevo y dejaría el viejo huérfano.**
+- `hub_agents` **no tiene UNIQUE** sobre `server_name` ni `agent_url` (el upsert es lógica de aplicación, no constraint). La fila `id=1` está referenciada por `hub_alerts.agent_id` (`ON DELETE SET NULL`) → no borrarla y recrearla.
+- El **heartbeat no pisa `server_name`**, pero **el registro del arranque sí** → un `UPDATE` directo en la DB se revierte en el próximo restart. La fuente de verdad es el `.env`.
+- **`SERVER_NAME` se captura una sola vez al arrancar** (`index.js:19`), sin reload en caliente → **el rename exige restart**.
+- El nombre es **cosmético** (panel admin): `grep "Servidor Clubix"` en la app de axiodemo → 0 resultados; nada depende del literal.
+
+**`/var/www/axio` en dev-1 = clone abandonado, candidato a baja.** Es una copia completa del repo de la app (no del agente), congelada el **2026-05-14**: sin un solo `node_modules`, sin `dist/`, sin `package-lock.json`, con un `ecosystem.config.js` de una versión que axiodemo ya abandonó. No corre ni puede correr; no participa de la integración (dev-1 no aloja DB de ninguna app tenant). **No es una integración rota: el agente nunca fue diseñado para correr ahí.** Antes de borrar: preservar `/var/www/axio/backups/` (dump `backup_axio_ml_20260412.sql` + tar del ml-service) y **cifrar los `.env` con credenciales reales** (Gemini, Anthropic, JWT, Parse API) a `infra-secrets`. El borrado es invasivo → regla de oro.
+
+**Hallazgo mayor asociado — directorios en `777`.** `/var/www/mini` y subdirectorios estaban en `drwxrwxrwx` en **axioma y dev-1** (**~90 dirs por server**, no 4). El `.env` en 600/640 protege el *contenido*, pero **manda el permiso de escritura del directorio**: cualquier usuario local podía **borrar o sustituir** ese `.env`. **Pesaba más que el hallazgo original.**
+
+> **✅ dev-1 NORMALIZADO + MIGRADO A `miniapp` (2026-07-20).** El usuario pidió que mini corra como `miniapp` en ambos servers; en dev-1 corría como `axiomacloud` → migración completa (no es un `chmod`).
+>
+> **Resultado dev-1:** proceso `miniapp` (God Daemon propio en `/home/miniapp/.pm2`, `pm2-miniapp.service` enabled), árbol entero en **`750 miniapp:miniapp`** con `find -not -user miniapp` **vacío**, `.env` ×3 en `600 miniapp:miniapp`, `uploads`/`backend/logs` en 750. Health 200 local + por los 2 dominios públicos, **`restart_time`=0 estable tras 70s**. `checkpoint-web` (que comparte el God Daemon viejo) **intacto**. Load del server **0.08**.
+>
+> **⚠ Hallazgo que casi rompe la migración — `/var/log/mini` está FUERA de `/var/www`.** Era `755 axiomacloud` y el ecosystem de dev-1 escribe ahí (`out_file`/`error_file`). Sin `chown miniapp:miniapp /var/log/mini`, **PM2 no puede escribir los logs y la app no arranca**. Se detectó en el relevamiento, antes de ejecutar. **Regla: al migrar de usuario, el `chown` debe cubrir los paths de log declarados en el ecosystem, no solo el árbol de la app.**
+>
+> **Riesgo #1 controlado — nginx.** `/var/www/mini`, `frontend/` y `frontend/dist/` deben quedar en **`755`** (traverse + lectura de `www-data`); el resto en 750. Un `750 miniapp:miniapp` en esas 3 rutas **tira el sitio**. Verificado con `sudo -u www-data test -r .../dist/index.html` en la misma pasada del chmod.
+>
+> **Dos gotchas reproducibles:** (1) tras migrar a usuario dedicado, los comandos PM2 hay que correrlos **desde un cwd neutro** (`/tmp`) — el primer `pm2 start` falló con `spawn EACCES` porque se ejecutaba parado en `/home/axiomacloud`, que `miniapp` no puede atravesar (mini estuvo caída ~1 min); (2) `chown -R` **no sigue symlinks**: 80 symlinks de `node_modules/.bin` quedaron con el owner viejo → normalizar con `chown -h`.
+>
+> **axioma: solo el `.env` del backend** (`640 axiomacloud:miniapp` → **`600 miniapp:miniapp`**, sin corte, metadata pura). **El `chown -R` del árbol queda PENDIENTE de ventana: mini en axioma ES productiva.**
+
+**Deploy de mini como `miniapp` — verificado viable (axioma).** El usuario pasa a desplegar con `sudo -u miniapp git -C /var/www/mini pull`. `miniapp` tiene **deploy key propia** (`/home/miniapp/.ssh/id_ed25519`, no depende del home de `axiomacloud`), `ls-remote` rc=0 y GitHub autentica. Origin: `git@github.com:martin4yo/AxiomaWeb.git` (**SSH**; el nombre del repo no es "mini" pero es el correcto y activo — no se repite el caso H12 de axio→ProHub). `safe.directory` ya configurado. En **dev-1 no existe `.git`** (el deploy no es por git) y `miniapp` **no tiene `~/.ssh`** ahí.
+
+⚠ **Riesgo para el próximo `git pull` en axioma:** hay **uploads de usuarios reales sin trackear dentro del working tree** (logos, `products/product-*.webp`, imágenes de WhatsApp). Un `git clean -fd` **los borraría**. Sacarlos del árbol o agregarlos a `.gitignore`.
+
+**Archivos sueltos con bits laxos (pendiente).** En dev-1 quedaron con bits 777 propios pero **contenidos por directorios en 750** → inocuos en la práctica (nadie los atraviesa). En **axioma siguen expuestos** hasta la ventana: `.env.local`, `.env.production` (777), `IIBB_*.txt`, `.xlsx` de comprobantes, `consola.log`, y **`/var/www/mini/.claude/`** con `memory.md`, `settings.local.json` y un **`worktrees/agent-a59cf71a` dentro del árbol de producción**. Ninguno es alcanzable por HTTP (el vhost sirve desde `frontend/dist`, un nivel abajo; axioma además bloquea dotfiles) — la exposición es **local**.
+
+**⚠ uid dispares:** `miniapp` es **1002 en axioma** y **1005 en dev-1**. No afecta la operación normal, pero un `rsync -a`/restore cruzado entre servers asignaría owners equivocados.
 
 ### 7. `checkpoint-web` (dev-1) — migración a `checkapp` abandonada + crash loop 🔴 ✅ CONTENIDO
 

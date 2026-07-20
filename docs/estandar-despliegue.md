@@ -62,6 +62,41 @@ id miniapp &>/dev/null || useradd --system --create-home \
 **Prohibido:** correr una app como `root`. (Estado inicial: corporate-backend, checkpoint las
 únicas remanentes tras la Fase 1; se corrigen en Fase 5.)
 
+### 2.1 Migrar una app existente a su usuario dedicado
+
+> Reglas destiladas de dos incidentes reales (2026-07-20): mini en axioma dio **500 en producción** al
+> reiniciarse, y **checkpoint-web estuvo 3 días en crash loop** (108k reinicios) por una migración
+> abandonada en enero. En ambos casos la causa fue **la misma**: el `.env` quedó con el owner viejo.
+
+1. **El `chown` del `.env` va en el MISMO paso que el cambio de usuario.** Nunca en pasos separados:
+   un `.env` con owner viejo **no rompe el proceso vivo** (el descriptor ya está abierto) — rompe el
+   **próximo arranque**. La bomba puede quedar latente días.
+2. **El `chown` debe cubrir los paths de log declarados en el ecosystem**, que suelen estar **fuera de
+   `/var/www`** (p. ej. `/var/log/<app>` en `out_file`/`error_file`). Si el usuario nuevo no puede
+   escribir ahí, **PM2 falla al arrancar**. Revisar el ecosystem, no solo el árbol de la app.
+3. **Verificar contra el usuario CONFIGURADO, no contra el proceso vivo**: `pm2 jlist` del PM2_HOME
+   correcto y `User=` de la unit systemd. `sudo -u <usuario> test -r <.env>` debe dar OK.
+4. **Criterio de cierre: `restart_time` estable tras 60 s.** Que la app "esté online" no alcanza —
+   un crash loop también reporta `online` entre reinicios. Este chequeo es el que habría cazado
+   checkpoint-web en enero. Ojo: `restart_time`/`pm_uptime` describen el **proceso actual**, no la
+   historia de arranques (un `pm2 delete`+`start` reinicia el contador).
+5. **nginx necesita traverse**: las rutas que sirve como estáticos (`/var/www/<app>`, `frontend/`,
+   `frontend/dist/`) van en **`755`**, no `750`, o `www-data` queda afuera y **se cae el sitio**.
+   Verificar con `sudo -u www-data test -r .../index.html` en la misma pasada del `chmod`.
+6. **Correr los comandos PM2 desde un cwd neutro** (`/tmp`). Parado en el home del usuario viejo, el
+   `pm2 start` falla con `spawn EACCES` — engañoso, porque parece un problema del binario de node.
+7. **`chown -R` no sigue symlinks**: normalizar aparte con `chown -h` (típicamente
+   `node_modules/.bin/*`).
+8. **Si el deploy es por git**, verificar que el usuario nuevo pueda autenticar contra el remoto
+   (deploy key propia en su `~/.ssh`, no en el home del usuario viejo) y configurar `safe.directory`.
+   Un árbol migrado con `.git` del owner viejo **bloquea el deploy** (la app sigue corriendo con
+   código viejo); al revés, un `pull` del usuario viejo sobre árbol nuevo **rompe la app en el
+   próximo restart**.
+9. **Sacar del working tree los datos de runtime** (uploads de usuarios): si viven dentro del repo,
+   un `git clean -fd` los borra.
+10. **Los uid pueden diferir entre servers** para el mismo `<app>app` (p. ej. `miniapp` es 1002 en
+    axioma y 1005 en dev-1) → un `rsync -a`/restore cruzado asigna owners equivocados.
+
 ---
 
 ## 3. Estructura de directorios
@@ -87,6 +122,17 @@ id miniapp &>/dev/null || useradd --system --create-home \
     renombra en disco** (evita tocar ecosystem + vhosts + rutas de código sin beneficio funcional).
   - El manifiesto es la fuente de verdad del layout; el redespliegue lo lee de ahí.
 - Owner recursivo: `chown -R <app>app:<app>app /var/www/<app>`.
+- **TODO el árbol `/var/www/<app>` DEBE ser `<app>app:<app>app`, sin excepción.** Es común que un
+  `git`, `npm install` o `prisma generate` corrido como `root` (o por otro usuario en un deploy
+  previo) deje archivos con owner `root` mezclados → la app **no puede leerlos/escribirlos** y falla
+  de formas confusas (build a medias, cliente Prisma que no se regenera, `EACCES`). **Como último
+  paso del deploy/redeploy, SIEMPRE re-aplicar el `chown -R` y verificar que quede en cero:**
+  ```sh
+  chown -R <app>app:<app>app /var/www/<app>
+  find /var/www/<app> -not -user <app>app | head    # DEBE no imprimir nada
+  ```
+  Regla de oro: **nunca correr `git`/`npm`/`prisma` como root** dentro de `/var/www/<app>`; usar
+  siempre `sudo -u <app>app`. Si igual pasó, el `chown` final lo corrige.
 
 Ejemplo de declaración de layout en el manifiesto:
 
@@ -208,6 +254,30 @@ Frontend estático (checkpoint, corporate): `root /var/www/<app>/frontend/dist;`
 
 ## 9. Base de datos
 
+- El rol de conexión de la app **DEBE** ser `<app>user` (el del `DATABASE_URL`), y **DEBE ser
+  OWNER de la base y de todos sus objetos** (tablas, secuencias, tipos, schema) — no basta con
+  `GRANT`. Full ownership evita el bug recurrente: cuando un `prisma migrate`/`db push` se corre
+  como otro rol (ej. `postgres`), las tablas creadas quedan con ese owner y `<app>user` pierde
+  acceso → `permission denied for table X` en runtime. Con ownership, `<app>user` puede correr
+  migraciones y DDL sin depender de re-otorgar grants.
+
+  ```sql
+  -- Estándar: <app>user dueño de todo (idempotente, correr como postgres)
+  ALTER DATABASE <app>_db OWNER TO <app>user;
+  ALTER SCHEMA public OWNER TO <app>user;
+  DO $$ DECLARE r RECORD; BEGIN
+    FOR r IN SELECT tablename FROM pg_tables WHERE schemaname='public' LOOP
+      EXECUTE format('ALTER TABLE public.%I OWNER TO <app>user', r.tablename); END LOOP;
+    FOR r IN SELECT sequence_name FROM information_schema.sequences WHERE sequence_schema='public' LOOP
+      EXECUTE format('ALTER SEQUENCE public.%I OWNER TO <app>user', r.sequence_name); END LOOP;
+    FOR r IN SELECT t.typname FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+             WHERE n.nspname='public' AND t.typtype='e' LOOP
+      EXECUTE format('ALTER TYPE public.%I OWNER TO <app>user', r.typname); END LOOP;
+  END $$;
+  ```
+  > **Regla operativa:** correr migraciones/`db push` **como `<app>user`** (no como `postgres`).
+  > Si por permisos hubo que correrlas como `postgres`, re-aplicar el bloque de arriba después.
+
 - Cada app con DB propia **DEBE** tener su base respaldada por **una stanza pgBackRest** (ya
   existe el backup + el restore drill; ver [DRP](./disaster-recovery-plan.md) y
   [restore-drill-procedure](./restore-drill-procedure.md)).
@@ -250,7 +320,8 @@ Cuando una app propia necesita algo más que Node+PM2, se declara un **hook** en
 Una app está "en el estándar" cuando **todo** esto es verdadero:
 
 - [ ] Corre bajo usuario dedicado `<app>app` (no root, no compartido) — `ps -o user= -C node`
-- [ ] Código en `/var/www/<app>/`, owner `<app>app:<app>app`
+- [ ] Código en `/var/www/<app>/`, **todo** owner `<app>app:<app>app` — `find /var/www/<app> -not -user <app>app` no imprime nada
+- [ ] DB: rol `<app>user` es **owner** de la base y de todas las tablas/secuencias/tipos — `SELECT tableowner FROM pg_tables WHERE schemaname='public'` todo `<app>user`
 - [ ] Repo git remoto configurado con credencial conocida — `git -C /var/www/<app> remote -v`
 - [ ] `ecosystem.config.js` (`.js`) con `name: '<app>'`
 - [ ] `systemctl is-enabled pm2-<app>app.service` → `enabled`
