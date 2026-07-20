@@ -644,6 +644,17 @@ La app vuelve al bind anterior en segundos.
 | **D — cambio de CÓDIGO** | axiodemo `:5300` axio-backend, dev-1 `:8086` checkpoint-web, dev-1 `:5000` + axioma `:5300` mediflow | `server.listen(port, cb)` sin host → **no se arregla desde infra** | **Sale de H04** → issue en cada repo de aplicación |
 | **E — excepciones aceptadas** | axiodemo `:8001` axio-ml, axioma `:8080` evolution-api | Ver abajo | Documentadas, **no se rebindean** |
 
+**Puntos de rollback vigentes (2026-07-20).** Si hay que revertir algo de esta pasada:
+
+| Cambio | Cómo revertir |
+|---|---|
+| axioma `:8087` parse-frontend | `cp /var/www/parse/ecosystem.config.js.bak-20260720-112311 /var/www/parse/ecosystem.config.js` + `pm2 restart` releyendo el ecosystem (`PM2_HOME=/var/www/parse/.pm2`, **no** el home de `parseapp`) |
+| CUPS dev-1 | `sudo snap enable cups` (se deshabilitaron `cups.cupsd` + `cups-browsed`) |
+| netdata (axioma / dev-1 / axiodemo) | `cp /etc/netdata/netdata.conf.bak-<ts> /etc/netdata/netdata.conf` + `systemctl restart netdata` en el server que corresponda |
+
+axioma `:3700` elore y dev-1 `:8087` parse **ya fueron revertidos** (`diff` vacío contra sus `.bak`) —
+no queda nada pendiente de deshacer ahí.
+
 **Excepciones aceptadas (E).**
 - **axiodemo `:8001` axio-ml — NO rebindear.** ufw tiene `8001 ALLOW IN 149.50.148.198`: **dev-1 lo
   consume remoto**. Bindear a loopback **rompe esa integración**. Se acepta en `0.0.0.0` acotado por ufw
