@@ -43,7 +43,7 @@ invasivos: no se ejecutan sin aprobación puntual.
 | Ola | # | Hallazgo (corto) | Server(s) | Sev | Riesgo interv. | Estado |
 |---|---|---|---|---|---|---|
 | **1 — Quick wins (no cortan servicio)** | H14 | `stub_status` nginx sin datos | los 3 con nginx | 🟢 | Muy bajo | [x] (2026-07-18) |
-| 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
+| 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [!] **REABIERTO (2026-07-20)** — el verde era falso: se verificó solo dev-1 y contra el proceso vivo → incidente en prod (mini axioma) |
 | 1 | H12 | `origin` de axio mal apuntado (a ProHub) | axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
 | **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [x] (2026-07-18) |
 | 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [x] (2026-07-19) |
@@ -742,9 +742,11 @@ de `reload` → corte innecesario. Mitigación: relevar orígenes reales (paso 1
    rompen, anotarlas como aceptadas con justificación (o planificar el upgrade en su propia ventana).
 4. Desplegar a `/var/www/hub` **como `hubapp`** (nunca root — regla de propiedad del estándar), respetando
    el flujo de deploy de hub: `sudo -u hubapp npm ci` desde la RAÍZ del monorepo (workspaces),
-   `prisma generate` desde la raíz, build backend+frontend, `pm2 reload hub` + `chown -R hubapp:hubapp
-   /var/www/hub` final + `find … -not -user hubapp` vacío. ⚠ **REQUIERE OK EXPLÍCITO**, ventana de bajo
-   tráfico (hub reinicia).
+   **`prisma generate` desde `backend/`** (⚠ **corregido 2026-07-20**: el plan decía "desde la raíz" y
+   **eso hace fallar el deploy** — `prisma.config.ts` apunta a `prisma/schema.prisma` pero el schema vive
+   en `backend/prisma/schema.prisma` y no existe `prisma/` en la raíz, ni siquiera en prod), build
+   backend+frontend, `pm2 reload hub` + `chown -R hubapp:hubapp /var/www/hub` final +
+   `find … -not -user hubapp` vacío. ⚠ **REQUIERE OK EXPLÍCITO**, ventana de bajo tráfico (hub reinicia).
 5. Backup previo: `tar /var/backups/hub-preaudit-<ts>.tar.gz` + `pg_dump hub_db` (por si algún bump toca
    Prisma/migraciones) + `dump.pm2`.
 
@@ -761,13 +763,57 @@ primero**; a prod solo va lo que buildeó y pasó health; una app (hub), una ven
 - `find /var/www/hub -not -user hubapp` vacío (regla de propiedad tras el deploy).
 - Rutina de higiene documentada (correr `npm audit` en cada deploy / mensual).
 
+> **TRABAJO EN CHECKOUT COMPLETO (2026-07-20) — listo para desplegar, NO desplegado.**
+> Prod verificado intacto al terminar (mismo md5 de lockfile, commit `311a6ed`, ambos procesos `online`).
+>
+> **Resultado: 61 → 11 vulnerabilidades · critical 3 → 0 · high 20 → 3**, sin un solo `--force` (todo
+> dentro de semver: 92 versiones cambiadas, 8 agregadas, 85 eliminadas). El fix más valioso:
+> `axios 1.13.2 → 1.18.1`, que cerró **23 advisories**. La cifra del plan ("47 back / 18 front") estaba
+> desactualizada: hoy son **61 en total** contando el árbol de workspaces desde la raíz — no se pueden
+> sumar back+front por separado porque el monorepo hoistea y hay doble conteo.
+>
+> **Build y tests en verde, pero el `audit fix` ROMPIÓ el build del backend.** El bump de axios endureció
+> el tipado de `resp.headers` y `tsc` falla en `parseOAuthService.ts:99` (TS2322). Causalidad **probada**
+> con un checkout de control sin el fix (que compila limpio). Arreglo: **2 líneas**, sin tocar lógica
+> (`String(resp.headers['content-type'] || …)` + cast en `content-disposition`). Con eso: backend OK,
+> frontend OK (Next 15.5.20), **36/36 tests backend + 21/21 frontend PASS**.
+> → **El deploy ya no es solo un lockfile: requiere un commit de código en ProHub.**
+>
+> **Los 3 high remanentes** (ninguno tiene fix no-breaking — lo que npm ofrece son *downgrades*):
+> - **`pdfjs-dist`** 🔴 — **el único con cadena de explotación real**: ejecución de JS arbitrario al abrir
+>   un PDF malicioso, y el input **lo controla el usuario** (portal de proveedores subiendo facturas).
+>   **NO aceptar sin mitigar**: aplicar `isEvalSupported: false`/`disableEval: true` en el `getDocument()`
+>   de `basicParseService.ts` (una línea, no rompe nada) y planificar el salto a v4+ aparte.
+> - **`nodemailer`** 🟡 — runtime alcanzable, pero las advisories se explotan vía direcciones/contenido
+>   controlados por atacante y en hub los destinatarios salen de la DB. Aceptar; agendar bump a v7.
+> - **`serialize-javascript`** 🟢 — **build-time puro** (vía `@rollup/plugin-terser` ← `next-pwa`), no llega
+>   a runtime. Aceptar sin reservas.
+>
+> **Sobre dev vs runtime:** `npm audit --omit=dev` **no sirve acá** — da los mismos 11 porque `next-pwa` y
+> `webpack` están declarados en `dependencies` aunque solo se usen al buildear. La separación hay que
+> hacerla por análisis de uso.
+>
+> **Dos errores del plan corregidos:** (1) `prisma generate` va **desde `backend/`**, no desde la raíz —
+> seguir el plan literal **haría fallar el deploy**; (2) la suite de tests no corre tal cual: falta
+> `ts-node` en el manifiesto (falla igual en la línea base) → agregarlo a `devDependencies`.
+>
+> **Riesgo que NO se puede validar desde el checkout:** ningún test toca S3 ni envío de mails reales, y
+> hubo dos movimientos grandes — **AWS SDK `3.932.0 → 3.1090.0`** (~158 minors) y `@prisma/engines-version`
+> saltando a línea **7.1.1** mientras `@prisma/client` queda en **6.19.0**. `prisma generate` funciona,
+> pero es lo primero a mirar si algo se comporta raro. → El post-deploy debe incluir **una subida real a
+> S3 y un envío de mail de prueba**, además del health 200 y el login.
+>
+> **Artefactos:** `package-lock.AFTER.json` y `parseOAuthService.PATCHED.ts` en el scratchpad de la sesión;
+> en axioma, `~/h13-scratch/hub` (remediado) y `~/h13-scratch/hub-base` (control) + los `audit-*.json`.
+
 **Sub-pasos:**
-- [ ] Foto `npm audit --json` back+front en checkout de trabajo + clasificación por severidad (lectura)
-- [ ] `npm audit fix` (no-breaking) en el checkout + build + tests
-- [ ] Evaluar majors que requieran `--force`, una a una (build/prueba) → aplicar o justificar aceptación
+- [x] Foto `npm audit --json` back+front en checkout de trabajo + clasificación por severidad (lectura) → **61 vulns (3 critical / 20 high)**
+- [x] `npm audit fix` (no-breaking) en el checkout + build + tests → **61→11**; requirió fix de 2 líneas por el bump de axios; **57/57 tests PASS**
+- [x] Evaluar majors que requieran `--force`, una a una → **ninguno aplicado** (los 3 restantes solo ofrecen downgrade) + justificación por severidad
+- [ ] **Decidir con el usuario:** ¿el deploy incluye el fix de tipos + la mitigación de `pdfjs`? (implica commit en ProHub)
 - [ ] Backup: tar `/var/www/hub` + `pg_dump hub_db` + `dump.pm2`
 - [ ] ⚠ Desplegar a `/var/www/hub` como `hubapp` + `pm2 reload` + `chown -R` final — **OK explícito**
-- [ ] Verificar: 0 high/critical + hub health/login OK + `find -not -user hubapp` vacío
+- [ ] Verificar: 0 critical + hub health/login OK + `find -not -user hubapp` vacío + **prueba real de S3 y de mail**
 - [ ] Documentar rutina mínima de higiene (npm audit por deploy/mensual)
 
 ---
@@ -841,6 +887,10 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-20 | H04 | Aplicado: axioma `:8087` parse-front → loopback; **CUPS dev-1 deshabilitado** (`snap disable`, nadie imprime); netdata → `bind to = 127.0.0.1` en los 3 servers | ✅ 5 ítems en verde — health 200, ACLK de netdata intacto (`claimed`/`aclk` true en los 3) |
 | 2026-07-20 | H04 | axioma `:3700` elore: `-H` bindeó bien pero **Next pasó a redirigir el login a `https://localhost:3700`** → rollback inmediato. `curl → 200` no lo detectaba (seguía 307): **criterio de verificación ampliado al `Location` de los 3xx** | ⛔ revertido — hallazgo transversal que bloquea las 5 apps Next |
 | 2026-07-20 | H04 | dev-1 `:8087` parse: `HOSTNAME` **inerte** (corre por CLI `next start`, no standalone como axioma — mismo ecosystem, distinto binario) → revertido. dev-1 `:3000` elore: **frenado ANTES de tocar** — pasar a `fork` activaría el `--hostname localhost` ya presente, reproduciendo el fallo | ⏸ pendientes de resolver el patrón Next.js |
+| 2026-07-20 | **H06** | ⛔ **Incidente en prod**: el usuario reinició **mini en axioma** → 500 por `.env` ilegible. El `chmod 600` del 17/07 se validó **solo en dev-1** y **contra el proceso vivo** (que no revalida permisos) → bomba latente 3 días. El usuario lo destrabó con `chmod 640` | ⚠️ **hallazgo reabierto** — regla de verificación corregida (owner vs. usuario *configurado*, app por app y server por server) |
+| 2026-07-20 | H06 | Auditoría owner-vs-proceso en los **5 servers**: el `640` de mini **no expuso nada** (grupo de 1 miembro que ya era owner). Detectadas 2 bombas latentes (mini frontend/print-agent en axioma), **`axio/.env` en 664 world-readable** en dev-1, y directorios `/var/www/mini` en **777** (el `.env` es sustituible pese al 600) | 📋 inventario completo en `hardening.md` §5 |
+| 2026-07-20 | **(nuevo)** | Al investigar lo anterior: **`checkpoint-web` en dev-1 en crash loop desde hace 3 días** (`restart_time=108455`, ~24/min) por una **migración a `checkapp` abandonada en enero** — el `.env` quedó en el owner viejo. Costaba **~0.6 de load sostenido**. `pm2 stop` + `save` de la instancia rota | ✅ contenido — **load 1m 1.50→0.88 (−41%)**, sitio intacto (lo sirve la instancia vieja); decisión completar/abortar pendiente |
+| 2026-07-20 | H13 | Trabajo completo en checkout aislado (axioma, Node 20): **61 → 11 vulns, critical 3 → 0**, sin `--force`. El `audit fix` rompió el build (tipado de axios) → fix de 2 líneas, **57/57 tests PASS**. Detectados 2 errores del plan (`prisma generate` desde la raíz **haría fallar el deploy**; falta `ts-node`) | ⏸ listo, **NO desplegado** — el deploy requiere commit de código en ProHub + decisión sobre mitigar `pdfjs` |
 
 ---
 

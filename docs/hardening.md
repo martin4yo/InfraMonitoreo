@@ -46,8 +46,63 @@ Pendiente: axiodemo ya tenía ufw (no requiere acción); auditar/configurar fire
 
 **Patrón bloqueante de Next.js (verificado en elore `:3700`, revertido):** el flag `-H`/`--hostname` bindea correctamente pero Next lo usa además para armar las **URLs absolutas de redirect** → `307 → https://localhost:3700/login` en vez del dominio público, dejando el login inutilizable. Un `curl` de código HTTP **no lo detecta** (sigue devolviendo 307): hay que inspeccionar el header `Location`. Afecta a las 5 apps Next pendientes (hub ×2, elore ×2, parse dev-1) → resolver una sola vez antes de reintentar.
 
-### 5. `.env` laxos 🟡 ✅ CORREGIDO
-Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-front, elore, evolution). Todos pasados a `chmod 600` el 2026-07-17. Pendiente aparte: normalizar owner de los `.env` de mini (hoy `axiomacloud`) en Fase 5.
+### 5. `.env` laxos 🟡 ⚠️ REABIERTO — el "corregido" era falso
+
+Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-front, elore, evolution). Todos pasados a `chmod 600` el 2026-07-17.
+
+> **⛔ INCIDENTE EN PRODUCCIÓN (2026-07-20 ~14:17) — el chequeo de este hallazgo estaba mal hecho.**
+> El usuario reinició **mini en axioma** y la app dio **error 500: no podía leer su `.env`**. Causa: el
+> proceso corre como **`miniapp`** (migración deliberada del **29/06**) pero el `chmod 600` del 17/07 dejó
+> el archivo como `axiomacloud:axiomacloud`. El usuario lo destrabó con `chmod 640` a las 14:19 y la app
+> levantó (el grupo `miniapp` tiene un solo miembro suplementario, `axiomacloud`, que ya era el owner y
+> tiene sudo → **el 640 no expuso las credenciales a nadie nuevo**).
+>
+> **Los dos errores de método que lo causaron (no repetirlos):**
+> 1. **Se verificó solo `dev-1`.** mini también existe en **axioma**, y ese server nunca se miró. El
+>    hallazgo se dio por verde con un relevamiento parcial.
+> 2. **Se verificó contra el proceso VIVO, no contra el usuario CONFIGURADO.** Un `chmod`/`chown` no
+>    rompe un proceso ya corriendo —el descriptor sigue abierto—, así que "la app sigue viva" **no prueba
+>    nada**. El fallo aparece recién en el **próximo arranque**: quedó latente 3 días y estalló al primer
+>    restart.
+>
+> **⚠ REGLA CORREGIDA (obligatoria para cerrar este hallazgo).** El owner del `.env` se compara contra el
+> usuario **configurado en PM2/systemd** (`pm2 jlist` del PM2_HOME correcto, `User=` de la unit), **app por
+> app y server por server** — nunca contra el proceso que casualmente está corriendo. Verificación efectiva:
+> `sudo -u <usuario-configurado> test -r <.env>` → debe dar OK. Y con `640`, revisar **`getent group <grupo>`**:
+> el modo es aceptable solo si el grupo no suma lectores inesperados.
+
+**Inventario owner-vs-proceso (auditoría 2026-07-20, los 5 servers).** Estado real tras el incidente:
+
+| Server | App | `.env` | Modo | owner:grupo | Proceso corre como | Estado |
+|---|---|---|---|---|---|---|
+| axioma | **mini backend** | `/var/www/mini/backend/.env` | 640 | `axiomacloud:miniapp` | `miniapp` | ✅ funciona (lee por grupo); pendiente `chown miniapp:miniapp` + 600 por prolijidad |
+| axioma | **mini frontend** | `/var/www/mini/frontend/.env` | 600 | `axiomacloud:axiomacloud` | (build) | ⚠️ **bomba latente** si se levanta como `miniapp` |
+| axioma | **mini print-agent** | `/var/www/mini/print-agent/.env` | 600 | `axiomacloud:axiomacloud` | (sin proceso) | ⚠️ **bomba latente** |
+| dev-1 | **checkpoint-web** | `/var/www/checkpoint-web/.env` | 600 | `axiomacloud:axiomacloud` | `axiomacloud` (viva) + `checkapp` (crash loop) | ⛔ ver sección 7 |
+| dev-1 | **axio** | `/var/www/axio/.env`, `backend/.env` | **664** | `axioapp:axioapp` | sin proceso | 🔴 **H06 abierto de verdad: world-readable** en el server de backups |
+| dev-1 | mediflow | `/var/www/mediflow/backend/.env` | 600 | `root:root` | `root` | 🟡 coincide, pero **corre como root** (viola el estándar) |
+| dev-1 | mini, hub, elore, fitness, parse, tally, core | varios | 600 | `<app>app` | idem | ✅ |
+| axioma | mediflow | `/var/www/mediflow/backend/.env` | 600 | `mediflowapp:www-data` | `mediflowapp` | 🟡 owner OK, grupo `www-data` raro |
+| axioma | hub, parse, elore, evolution-api | varios | 600 | `<app>app` | idem | ✅ |
+| clubix / axiodemo | clubix, axio | varios | 600 | `<app>app` | idem | ✅ |
+
+**Pendientes de este hallazgo:** (1) `axio/.env` 664 → 600 en dev-1 (**prioridad**, sin proceso corriendo → sin riesgo); (2) las 2 bombas latentes de mini en axioma; (3) `chown miniapp:miniapp` + 600 del backend de mini; (4) mediflow: sacar de root (dev-1) y normalizar grupo (axioma).
+
+**Hallazgo mayor asociado — directorios en `777`.** `/var/www/mini` y subdirectorios están en `drwxrwxrwx` en **axioma y dev-1**. El `.env` en 600/640 protege el *contenido*, pero **manda el permiso de escritura del directorio**: cualquier usuario local puede **borrar o sustituir** ese `.env`. Hay además `.env.local`/`.env.production`/`.env.example` en 777 y archivos de negocio sueltos (`IIBB_Ventas.txt`, `.xlsx` de comprobantes, `consola.log`). **Esto pesa más que el hallazgo original.** Normalizar a `750 <app>app:<app>app` + `.env.*` a 600.
+
+### 7. `checkpoint-web` (dev-1) — migración a `checkapp` abandonada + crash loop 🔴 ✅ CONTENIDO
+
+Detectado al investigar el incidente de mini. **Migración iniciada el 23/01/2026 y nunca terminada**: el árbol `/var/www/checkpoint-web` ya es `checkapp:checkapp` (755) y `pm2-checkapp.service` está `enabled`, pero **el `.env` quedó en `axiomacloud:axiomacloud` 600** → `checkapp` **NO_LEE**.
+
+Consecuencia: la instancia `checkapp` **nunca llegó a bindear** y estuvo en **crash loop `restart_time=108455` (~24 reinicios/minuto durante 3 días)**, costando **~0.6 de load sostenido** en dev-1 — la caja que aloja los backups de toda la infra. El sitio nunca se cayó: lo sirve la instancia vieja (`axiomacloud`, pid 1817, `:8086`, nginx `proxy_pass localhost:8086`).
+
+**✅ Contenido (2026-07-20 15:21):** `pm2 stop checkpoint-web` + `pm2 save` en el PM2_HOME de `checkapp` (no revive al reboot). Verificado: `restart_time` congelado tras 95s, sitio intacto (307 local / 200 público en 3 lecturas), **load 1m 1.50 → 0.88 (−41%)**. Rollback: `pm2 start checkpoint-web` en `/home/checkapp/.pm2`.
+
+**Nota:** no se pudo probar que la causa fuera *solo* el `.env` — el stderr real no queda registrado. Hipótesis viva adicional: `EADDRINUSE` por el `:8086` ocupado por la instancia vieja. Probablemente ambas → arreglar solo el `.env` no alcanzaría.
+
+**Decisión pendiente del usuario: completar la migración o abortarla.** Si se completa, antes hay que hacer `chown -R checkapp:checkapp` — hay **archivos `root:root` sueltos** (`.next/`, `package-lock.json`, `next.config.ts`, `public/`, `scripts/`…). Revisar aparte `cookies.txt` y **`backup_checkpoint_db.sql`** (dump de base) dentro del directorio servido por la app.
+
+**Higiene de logs (pendiente):** sin rotación — `mini-backend-out-0.log` en axioma **130 MB creciendo**; `checkpoint-web-out-0.log` 7,2 MB (ya frenado); `/var/log/mini/backend-out-1.log` 7,3 MB en dev-1.
 
 ### 6. Credenciales R2 🟡 → ✅ TOKEN ROTADO (2026-07-17)
 `repo2-s3-key-secret` + `repo2-cipher-pass` en texto plano en `/etc/pgbackrest/pgbackrest.conf`; además se expusieron en una sesión el 2026-07-17. **Hecho**: rotado el API token R2 (viejo `a8790e48…` borrado en Cloudflare, nuevo `b47676fd…` aplicado en los **5 archivos** con backup), verificado con `pgbackrest check` en las 4 stanzas; `cipher-pass` conservado; credenciales cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). Ver `pgbackrest-setup.md`. **Cerrado (2026-07-19, H03 del plan de remediación).** Se evaluaron las 3 opciones (mantener+endurecer / archivo dedicado `600` vía `config-include-path` / variables `PGBACKREST_*`) y se eligió **mantener en el `.conf` + endurecer**: pgBackRest siempre necesita el secreto en claro en ejecución, así que mover a otro archivo owner-only es ganancia marginal frente a editar 5 configs productivas, y las env vars serían **peores** (legibles en `/proc/<pid>/environ`).
