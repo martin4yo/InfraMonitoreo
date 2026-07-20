@@ -46,8 +46,8 @@ invasivos: no se ejecutan sin aprobación puntual.
 | 1 | H06 | `.env` laxos → 600 | dev-1, axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
 | 1 | H12 | `origin` de axio mal apuntado (a ProHub) | axiodemo | 🟡 | Muy bajo | [x] (2026-07-18) |
 | **2 — Monitoreo / verificación (aditivos)** | H08 | Alarma antigüedad backup pgBackRest sin desplegar | dev-1 | 🟡 | Bajo | [x] (2026-07-18) |
-| 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [ ] |
-| **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [ ] |
+| 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [x] (2026-07-19) |
+| **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [!] bloqueado — coordinar con dattaweb |
 | 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [ ] |
 | **4 — Invasivos sobre apps/DB en prod (⚠ OK explícito)** | H04 | Apps escuchando en `0.0.0.0` → loopback | axioma, dev-1, axiodemo | 🟡 | Medio-Alto | [ ] |
 | 4 | H01 | `pg_hba` `0.0.0.0/0 md5` → rangos + scram | axioma | 🔴→🟡 | Alto | [ ] |
@@ -333,13 +333,34 @@ si abortó, borrar `/var/lib/postgresql/restore-drill/<stanza>` a mano (§9.4/§
 - Cada corrida: `pg_is_in_recovery()=f`, `pg_last_xact_replay_timestamp()` < 30 min, conteo de tablas > 0.
 - Próxima corrida mensual agendada y anotada.
 
+> **HECHO (2026-07-19) — las 3 stanzas en PASS, pero primero hubo que arreglar el drill.**
+> Las 2 corridas iniciales del día dieron **FAIL sistemático en AxiomaCloudProd y clubix** (PG14) con
+> axiodemo (PG16) en PASS. El diagnóstico mostró que **los backups estaban sanos: el bug era del
+> script**, por dos causas acumuladas (ambas corregidas en `scripts/70-restore-drill.sh`):
+> 1. **`pg_hba.conf` copiado del cluster local.** El script copiaba
+>    `/etc/postgresql/<v>/main/pg_hba.conf` al PGDATA temporal si existía. En el ejecutor existe el de
+>    PG14 y trae `host all all 127.0.0.1/32 scram-sha-256` → la instancia restaurada **pedía password**
+>    y el `psql` del drill (sin credencial) era rechazado por **autenticación**, no porque PG estuviera
+>    caído. axiodemo pasaba solo porque no hay `/etc/postgresql/16` y caía en el `trust` del `else`.
+>    Fix: **generar siempre** un `pg_hba` mínimo `trust` (PGDATA temporal, loopback, se borra al final).
+> 2. **Chequeo de conectividad sin espera.** Durante el replay inicial PG responde
+>    `FATAL: the database system is starting up`; un intento único daba falso FAIL en las bases grandes.
+>    Fix: reintentar hasta 300s, igual que el paso 2.
+>
+> **Corrida verificada (2026-07-19 20:08, KEYSOFT-UBUNTU, exit=0, `✓ DRILL EXITOSO`):**
+> `AxiomaCloudProd` PASS (restore 71s, 585 tablas en 11 bases, backup 1h), `clubix` PASS (44s, 178
+> tablas, backup 0h), `axiodemo` PASS (11s, 34 tablas, backup 0h). Las 3 con WAL replay progresando
+> hasta el último segmento archivado y `wal_lag` ≤ 1m. **Primera corrida exitosa registrada de
+> AxiomaCloudProd y clubix.** Producción no fue tocada (restore aislado en el ejecutor).
+
 **Sub-pasos:**
-- [ ] Verificar prerequisitos del host ejecutor (PG14+PG16, sudo→postgres, SSH dev-1, disco) (lectura)
-- [ ] `pgbackrest verify` de las 3 stanzas de prod desde dev-1 (lectura)
-- [ ] Correr `70-restore-drill.sh AxiomaCloudProd clubix axiodemo` (host ≠ dev-1)
-- [ ] Confirmar PASS de las 3 + `git commit` de `drill-history.csv`
-- [ ] Agendar cadencia mensual + registrar próxima fecha
-- [ ] Agregar fila de nota a `restore-drill-procedure.md` §8 (primeras corridas de AxiomaCloudProd/clubix)
+- [x] Verificar prerequisitos del host ejecutor (PG14+PG16, SSH dev-1, 114 GB libres) (lectura)
+- [x] Estado de las stanzas desde dev-1 (lectura) → las 4 en `status: ok`
+- [x] **Arreglar el drill** (falsos FAIL en PG14): `pg_hba` trust siempre + espera de 300s en conectividad
+- [x] Correr `70-restore-drill.sh AxiomaCloudProd clubix axiodemo` (host ≠ dev-1) → `exit=0`
+- [x] Confirmar PASS de las 3 + `git commit` de `drill-history.csv`
+- [ ] Agendar cadencia mensual + registrar próxima fecha (próxima: **2026-08-19**)
+- [x] Agregar fila de nota a `restore-drill-procedure.md` §8 (primeras corridas de AxiomaCloudProd/clubix)
 
 ---
 
@@ -390,8 +411,24 @@ Si se hizo `disable`, `systemctl enable --now snmpd`.
 - `sudo -n ss -ulnp | grep :161` → bind en `127.0.0.1` (Camino A) o solo escuchando para las IPs esperadas.
 - (Camino B) confirmar con el proveedor que sigue recibiendo datos.
 
+> **DIAGNÓSTICO (2026-07-19) — Camino B confirmado por evidencia directa; el proveedor SÍ usa SNMP.**
+> Config actual en dev-1: **no hay `agentaddress`** (bind en `0.0.0.0:161`, confirmado por `ss`) y la
+> community es `public`, pero **ya está acotada por IP de origen** vía `com2sec dattaweb` a las dos IPs
+> de dattaweb (`200.58.112.191`, `200.58.109.50`) — mejor de lo que asumía el plan (no es un
+> `rocommunity public` abierto). Servicio `active`+`enabled`, uptime 2d11h.
+>
+> **El journal NO sirve como evidencia** (snmpd no loguea consultas exitosas por defecto: 0 líneas en
+> 30d). La prueba real fue `tcpdump udp port 161`: dattaweb (`200.58.112.191`) **poletea activamente
+> cada ~1s** (`GetNextRequest .1.3.6.1.4.1.2021.10.1.3.1` = load average) y **snmpd responde**
+> (`GetResponse … ="1.78"/"1.89"`). → **Camino A (loopback/disable) rompería el monitoreo del
+> proveedor: queda descartado.** Se ejecuta **Camino B** (community fuerte por IP), que **requiere
+> coordinar el nuevo secreto con dattaweb ANTES de aplicar** — si se cambia sin avisar, el proveedor
+> deja de recibir métricas. Bloqueado a la espera de esa coordinación (acción del usuario con el
+> proveedor), no de una decisión técnica.
+
 **Sub-pasos:**
-- [ ] Relevar config snmpd + bind + uso real por el proveedor (lectura) → decidir Camino A/B
+- [x] Relevar config snmpd + bind + uso real por el proveedor (lectura) → **Camino B** (dattaweb poletea y snmpd responde, verificado por tcpdump)
+- [ ] ⚠ **Coordinar la nueva community con dattaweb** (prerequisito bloqueante del resto)
 - [ ] Backup `snmpd.conf.bak-<ts>`
 - [ ] ⚠ Aplicar Camino A (loopback/disable) o B (community fuerte + acotar) + restart — **OK explícito**
 - [ ] Verificar: community `public` no responde + bind correcto (+ proveedor OK si Camino B)
@@ -689,6 +726,8 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-18 | H12 | `remote set-url origin` de axio → `github-axio:AxiomaCloud/axio.git` (SSH, deploy key funcional; el plan asumía HTTPS/no había credencial) + fetch de verificación | ✅ verde — trae axio (no hub), working tree intacto, sin pull |
 | 2026-07-18 | H06 | `.env` → 600 con backup: axiodemo x2 (owner OK), dev-1 x3 (elore directo; mediflow `chown root`; checkpoint `chown axiomacloud`) | ✅ verde — 5 en 600, owners leen OK, apps vivas |
 | 2026-07-18 | H08 | Diagnóstico: monitoreo pgBackRest **ya desplegado 26-May** en dev-1 (colector `pgbackrest-collect.py` + cron 15min + health.d + statsd.d), charts con datos, alarmas en CLEAR. Solo se reconcilió el colector del repo (versión multi-repo del server, md5-idéntica) — sin tocar dev-1 | ✅ verde — ya estaba andando; repo puesto al día |
+| 2026-07-19 | H07 | FAIL sistemático en PG14 diagnosticado como **bug del drill, no de los backups** (pg_hba `scram` copiado del cluster local → rechazo por auth; + chequeo de conectividad sin esperar el replay). Arreglado `70-restore-drill.sh` y re-corrido | ✅ verde — las 3 stanzas PASS (585/178/34 tablas, WAL al día); 1ª corrida OK de AxiomaCloudProd y clubix |
+| 2026-07-19 | H09 | Relevamiento (lectura) en dev-1: community `public` pero ya acotada por `com2sec` a 2 IPs dattaweb; bind `0.0.0.0:161`. `tcpdump` prueba que **dattaweb poletea cada ~1s y snmpd responde** | ⏸ bloqueado — Camino A descartado; Camino B exige coordinar la nueva community con el proveedor |
 
 ---
 

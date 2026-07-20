@@ -206,18 +206,19 @@ start_temp_pg() {
     info "Arrancando PG${pgver} en puerto ${port}..."
 
     # pg_hba.conf: en Ubuntu el PGDATA de producción no lo incluye (está en /etc/postgresql).
-    # Copiamos el del cluster local si existe, si no generamos uno mínimo.
-    local hba_src="/etc/postgresql/${pgver}/main/pg_hba.conf"
-    if [[ -f "$hba_src" ]]; then
-        sudo_pg cp "$hba_src" "${pgdata}/pg_hba.conf"
-        info "pg_hba.conf copiado desde ${hba_src}"
-    else
-        sudo_pg bash -c "cat > '${pgdata}/pg_hba.conf'" <<'HBAEOF'
+    # SIEMPRE generamos uno mínimo con 'trust' — NO copiar el del cluster local.
+    # Copiarlo fue la causa de FAIL sistemático en las stanzas PG14 (2026-07-19):
+    # /etc/postgresql/14/main/pg_hba.conf existe en el ejecutor y trae
+    # 'host all all 127.0.0.1/32 scram-sha-256', así que la instancia restaurada
+    # pedía password y el psql del drill (-h 127.0.0.1 -U postgres, sin credencial)
+    # era rechazado por AUTENTICACIÓN — no porque PG estuviera caído. axiodemo (PG16)
+    # pasaba solo porque no hay /etc/postgresql/16 y caía en el 'trust' de este else.
+    # 'trust' es seguro acá: PGDATA temporal, aislado, solo loopback, se borra al final.
+    sudo_pg bash -c "cat > '${pgdata}/pg_hba.conf'" <<'HBAEOF'
 local   all   all                trust
 host    all   all   127.0.0.1/32 trust
 HBAEOF
-        info "pg_hba.conf mínimo generado"
-    fi
+    info "pg_hba.conf mínimo (trust, loopback) generado"
 
     # pg_ident.conf también puede faltar
     [[ ! -f "${pgdata}/pg_ident.conf" ]] && sudo_pg touch "${pgdata}/pg_ident.conf"
@@ -262,11 +263,25 @@ verify_stanza() {
 
     header "VERIFICACIÓN: ${stanza}"
 
-    # 1. Conectividad
-    if sudo_pg "$psql" $conn -tAq -c "SELECT 1" 2>/dev/null | grep -q 1; then
+    # 1. Conectividad — con espera. Durante el replay inicial del WAL, PG rechaza
+    #    conexiones con "FATAL: the database system is starting up". Cuanto más
+    #    grande la base, más tarda en llegar a estado consistente: un intento único
+    #    da falsos FAIL en las stanzas grandes (AxiomaCloudProd/clubix) y solo pasa
+    #    la chica (axiodemo). Reintentar hasta 300s, igual que el paso 2.
+    local conn_ok="" conn_deadline
+    conn_deadline=$(( SECONDS + 300 ))
+    while (( SECONDS < conn_deadline )); do
+        if sudo_pg "$psql" $conn -tAq -c "SELECT 1" 2>/dev/null | grep -q 1; then
+            conn_ok=1
+            break
+        fi
+        info "  Esperando que PG acepte conexiones en ${port} (replay inicial del WAL)..."
+        sleep 5
+    done
+    if [[ -n "$conn_ok" ]]; then
         ok "PostgreSQL acepta conexiones en puerto ${port}"
     else
-        fail "${stanza}: PostgreSQL no responde en puerto ${port}"
+        fail "${stanza}: PostgreSQL no responde en puerto ${port} tras 300s"
         return 1
     fi
 

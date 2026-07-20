@@ -327,6 +327,24 @@ e incidentes con observaciones — no duplica cada corrida rutinaria del CSV.
 |---|---|---|---|---|---|---|---|---|
 | 2026-05-29 | martin4yo | axiodemo | 20260529-091303F_20260529-193004I | repo2 | 14s | 1 min | 33 | PASS |
 | 2026-07-04 | martin4yo | axiodemo | 20260628-033014F_20260704-153017I | R2 (repo1 local) | 15s | 0 min | 34 | PASS |
+| 2026-07-19 | martin4yo | AxiomaCloudProd | 20260719-030015F_20260719-190019I | R2 | 71s | 0 min | 585 | **PASS — 1ª corrida** |
+| 2026-07-19 | martin4yo | clubix | 20260719-031514F_20260719-191516I | R2 | 44s | 1 min | 178 | **PASS — 1ª corrida** |
+| 2026-07-19 | martin4yo | axiodemo | 20260719-033013F_20260719-193017I | R2 | 11s | 1 min | 34 | PASS |
+
+> **Nota sobre las corridas FAIL previas del 2026-07-19** (12:26 y 12:51 en el CSV): fueron **falsos
+> negativos del script**, no fallas de backup. Dos bugs, ambos corregidos en `70-restore-drill.sh`
+> antes de la corrida de las 20:08:
+> 1. El script copiaba el `pg_hba.conf` del cluster local al PGDATA temporal cuando existía. El de
+>    PG14 del ejecutor trae `scram-sha-256` → la instancia restaurada pedía password y el `psql` del
+>    drill era rechazado **por autenticación**, leído como "PG no responde". Solo fallaban las stanzas
+>    PG14 (AxiomaCloudProd, clubix); axiodemo (PG16) pasaba porque no hay `/etc/postgresql/16` y caía
+>    en el `trust` por defecto. Ahora **siempre** se genera el `pg_hba` mínimo `trust`.
+> 2. El chequeo de conectividad no esperaba: durante el replay inicial PG responde `the database
+>    system is starting up`, y un intento único daba falso FAIL en las bases grandes. Ahora reintenta
+>    hasta 300s.
+>
+> **Lección:** ante un FAIL, distinguir *fallo de restore* de *fallo de verificación* antes de
+> escalarlo como incidente de DR. Acá los backups estaban íntegros en los 3 casos.
 
 **Resultados posibles:** `PASS` / `FAIL` / `PARCIAL` (especificar observaciones en el commit o ticket correspondiente).
 
