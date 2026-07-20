@@ -49,7 +49,7 @@ invasivos: no se ejecutan sin aprobación puntual.
 | 2 | H07 | Restore drills AxiomaCloudProd+clubix + cadencia mensual | infra (backup) | 🟡 | Bajo | [x] (2026-07-19) |
 | **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [!] bloqueado — coordinar con dattaweb |
 | 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [x] (2026-07-19) |
-| **4 — Invasivos sobre apps/DB en prod (⚠ OK explícito)** | H04 | Apps escuchando en `0.0.0.0` → loopback | axioma, dev-1, axiodemo | 🟡 | Medio-Alto | [ ] |
+| **4 — Invasivos sobre apps/DB en prod (⚠ OK explícito)** | H04 | Apps escuchando en `0.0.0.0` → loopback | axioma, dev-1, axiodemo | 🟡 | Medio-Alto | [~] parcial (2026-07-20) — 5 en verde; Next.js bloqueadas por patrón `-H`/redirects |
 | 4 | H01 | `pg_hba` `0.0.0.0/0 md5` → rangos + scram | axioma | 🔴→🟡 | Alto | [ ] |
 | 4 | H13 | `npm audit` hub (47 back / 18 front) + higiene | apps (axioma) | 🟡 | Alto | [ ] |
 | 4 | H11 | `axio-ml` corre como `axiomacloud` → usuario dedicado | axiodemo | 🟢 | Alto | [ ] |
@@ -576,14 +576,80 @@ La app vuelve al bind anterior en segundos.
 - Health por nginx: `curl -k https://<dominio>/…` sigue 200; endpoint interno responde solo en loopback.
 - Boot test de la app tocada (reinicio del servicio → sigue en loopback).
 
+> **PARCIAL (2026-07-20) — 5 ítems en verde; el resto BLOQUEADO por un hallazgo transversal de Next.js.**
+>
+> **El relevamiento corrigió tres premisas del plan:**
+> 1. **Todos los `proxy_pass` de nginx ya apuntan a loopback** en los 3 servers → el riesgo que más
+>    preocupaba al plan (rebindear y romper el proxy) **no existía**. Paso 2 del procedimiento: verde.
+> 2. **La lista de puertos estaba desactualizada.** En dev-1, 3 de los 5 puertos listados ya estaban en
+>    loopback o cambiaron de dueño; aparecieron listeners nuevos no contemplados en axioma
+>    (`:8089` hub, `:8080` evolution-api, `:3700` elore, `:5300` mediflow).
+> 3. **`-H 127.0.0.1` en el ecosystem NO arregla 5 de las 12 apps**, contra lo que asume el plan:
+>    - **PM2 `exec_mode: 'cluster'`** → el socket lo abre el God Daemon y PM2 **ignora** `--hostname`/
+>      `HOST`/`HOSTNAME`. Prueba: dev-1 `elore` **ya tenía** `--hostname localhost` y escuchaba en `*:3000`.
+>    - **Código con `server.listen(port, cb)` sin argumento host** → ignora la env var. checkpoint-web
+>      (`server.ts:33`), mediflow (`server.js:233`) y axio-backend (`dist/server.js:117`) **ya tenían**
+>      `HOSTNAME`/`HOST=127.0.0.1` en su entorno, inerte. Requiere **cambio de código**, no de infra.
+>
+> **⛔ HALLAZGO TRANSVERSAL — el flag `-H`/`--hostname` de Next.js rompe los redirects.**
+> Al aplicarlo en axioma `:3700` elore, el bind funcionó pero Next pasó a construir las **URLs absolutas
+> de redirect** con ese host: `307 → https://localhost:3700/login` en vez de `https://elore.com.ar/login`
+> → **todo el flujo de login inutilizable**. Se revirtió en el acto (`diff` vacío contra el `.bak`).
+> Descartado que sea config: `APP_URL`/`NEXT_PUBLIC_APP_URL` correctos y nginx pasa `Host $host` bien en
+> las 5 locations — **el redirect malo lo genera Next desde el hostname de bind**.
+> **Afecta a TODAS las Next que quedan** (hub ×2, elore ×2, parse dev-1) → resolver **una sola vez**
+> (probablemente `trustHost`/`assetPrefix`/`X-Forwarded-Host`) antes de reintentar app por app.
+>
+> **⚠ Criterio de verificación ampliado (obligatorio de acá en más).** `curl → 200` **habría dado elore
+> por verde con el login roto en producción**: seguía devolviendo 307. Hay que inspeccionar el
+> **`Location` de toda respuesta 3xx** y compararlo contra el valor capturado ANTES del cambio.
+>
+> **Matiz que invalidó el supuesto de "apps gemelas":** axioma y dev-1 comparten el mismo
+> `ecosystem.config.js` de parse, pero axioma corre el **build standalone** (`server.js`, que lee
+> `process.env.HOSTNAME`) y dev-1 arranca por el **CLI `next start`** (que lo ignora y solo respeta `-H`).
+> El ecosystem es idéntico; el binario que corre, no. El cambio en dev-1 fue **inerte** (bind siguió en
+> `*:8087`) → se revirtió igual: config que declara algo que no ocurre es peor que no tenerla.
+>
+> **Hallazgos colaterales (fuera de H04, para la estandarización):**
+> - **dev-1 `:5000` mediflow-backend corre como `root`** — viola la regla de propiedad del estándar. Más
+>   grave que el bind en sí.
+> - **dev-1 `:8086` checkpoint-web corre como `axiomacloud`**, no `checkpointapp`.
+> - **`/var/www/elore/ecosystem.config.js` es `root:root`** (debería ser `eloreapp:eloreapp`).
+> - **`pm2 reload --update-env` NO aplica cambios de bind** (reusa el env cacheado): hace falta
+>   `pm2 restart <ecosystem> --only <app> --update-env` releyendo el archivo.
+> - **`PM2_HOME` de `parseapp` en axioma es `/var/www/parse/.pm2`**, no `/home/parseapp/.pm2` (no existe).
+>   Un `pm2 save` al home equivocado falla con `EACCES` y **deja sin rollback**.
+> - axiodemo tiene `3001/tcp ALLOW` en ufw pero **nada escucha en 3001** → regla huérfana a limpiar.
+
 **Sub-pasos:**
-- [ ] Mapear listeners `0.0.0.0` + proceso + host que los fija, por server (lectura)
-- [ ] Confirmar `proxy_pass` de nginx apunta a loopback (o ajustarlo en la misma ventana) (lectura)
-- [ ] ⚠ axioma `:8087` parse-front → `-H 127.0.0.1` + reload — **OK explícito**
-- [ ] ⚠ axiodemo `:5300` → loopback + reload — **OK explícito**
-- [ ] ⚠ dev-1 apps Node `:3000/5000/8086/8087/8089` → loopback, una a una — **OK explícito**
-- [ ] ⚠ dev-1 CUPS `:631` + netdata `:19999` → loopback/confirmado — **OK explícito**
-- [ ] Verificar `ss` en loopback + health por nginx + boot test, por app
+- [x] Mapear listeners `0.0.0.0` + proceso + host que los fija, por server (lectura) → lista del plan corregida
+- [x] Confirmar `proxy_pass` de nginx apunta a loopback (lectura) → **los 3 servers ya en loopback**
+- [x] ⚠ axioma `:8087` parse-front → `HOSTNAME: '127.0.0.1'` (standalone) + restart — **VERDE** (health 200)
+- [x] ⚠ dev-1 CUPS `:631` → **`snap disable cups`** (nadie imprime; menos superficie que loopback) — **VERDE**
+- [x] ⚠ netdata `:19999` → `bind to = 127.0.0.1` en axioma + dev-1 + axiodemo — **VERDE** (ACLK saliente intacto: `claimed=true`, `aclk-available=true` en los 3)
+- [!] axioma `:3700` elore → **REVERTIDO**: `-H` rompió los redirects de login (ver hallazgo transversal)
+- [!] dev-1 `:8087` parse-front → **REVERTIDO**: `HOSTNAME` inerte (corre por CLI, no standalone); necesita `-H`
+- [!] dev-1 `:3000` elore → **NO EJECUTADO**: el ecosystem ya trae `--hostname localhost` (hoy inerte por
+      `cluster_mode`); pasar a `fork` **activaría el flag conocido-roto** en producción. Frenado antes de tocar
+- [ ] hub-frontend axioma `:8089` + dev-1 `:8089` → salteados (misma vía `-H` que falló)
+- [ ] **Resolver el patrón Next.js `-H` vs. redirects (una vez, para las 5 apps)** ← desbloquea lo anterior
+- [ ] Verificar `ss` en loopback + health **+ `Location` de los 3xx** + boot test, por app
+
+**Reclasificación del alcance (2026-07-20).** Lo que queda NO es todo de infra:
+
+| Tanda | Ítems | Naturaleza | Destino |
+|---|---|---|---|
+| **A/B/C ejecutadas** | axioma parse, CUPS, netdata ×3 | Infra | ✅ verde |
+| **Next.js bloqueadas** | hub ×2, elore ×2, parse dev-1 | Infra, pero bloqueadas por el patrón `-H`/redirects | Resolver el patrón primero |
+| **D — cambio de CÓDIGO** | axiodemo `:5300` axio-backend, dev-1 `:8086` checkpoint-web, dev-1 `:5000` + axioma `:5300` mediflow | `server.listen(port, cb)` sin host → **no se arregla desde infra** | **Sale de H04** → issue en cada repo de aplicación |
+| **E — excepciones aceptadas** | axiodemo `:8001` axio-ml, axioma `:8080` evolution-api | Ver abajo | Documentadas, **no se rebindean** |
+
+**Excepciones aceptadas (E).**
+- **axiodemo `:8001` axio-ml — NO rebindear.** ufw tiene `8001 ALLOW IN 149.50.148.198`: **dev-1 lo
+  consume remoto**. Bindear a loopback **rompe esa integración**. Se acepta en `0.0.0.0` acotado por ufw
+  a esa única IP. (Alternativa futura: bindear a la IP privada específica en vez de `0.0.0.0`.)
+- **axioma `:8080` evolution-api** — app de tercero **sin ecosystem versionado** en `/var/www/evolution-api`;
+  el bind sale de su `.env`/código upstream. Baja prioridad, investigar antes de tocar.
 
 ---
 
@@ -760,6 +826,10 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-19 | H07 | FAIL sistemático en PG14 diagnosticado como **bug del drill, no de los backups** (pg_hba `scram` copiado del cluster local → rechazo por auth; + chequeo de conectividad sin esperar el replay). Arreglado `70-restore-drill.sh` y re-corrido | ✅ verde — las 3 stanzas PASS (585/178/34 tablas, WAL al día); 1ª corrida OK de AxiomaCloudProd y clubix |
 | 2026-07-19 | H09 | Relevamiento (lectura) en dev-1: community `public` pero ya acotada por `com2sec` a 2 IPs dattaweb; bind `0.0.0.0:161`. `tcpdump` prueba que **dattaweb poletea cada ~1s y snmpd responde** | ⏸ bloqueado — Camino A descartado; Camino B exige coordinar la nueva community con el proveedor |
 | 2026-07-19 | H03 | Relevamiento mostró los `.conf` ya en `640`+owner correcto (no versionados) y la superficie real en **4 `.bak` con creds pre-rotación**. Mecanismo **(a)**: verificado que el `cipher-pass` de los `.bak` era idéntico al vivo → respaldo en tar `600` root-only → borrados los 4 (+2 residuos sin creds) | ✅ verde — 0 `.bak` en los 5 servers, `check` de las 4 stanzas OK (repo1+repo2); ningún `.conf` vivo tocado |
+| 2026-07-20 | H04 | Relevamiento: **todos los `proxy_pass` ya en loopback** (riesgo principal inexistente); lista de puertos del plan corregida; detectado que `-H`/`HOSTNAME` **no sirve en 5 de 12 apps** (PM2 `cluster` ignora el flag; 4 apps hacen `server.listen(port, cb)` sin host) | ⚠ el plan asumía un fix universal que no aplica |
+| 2026-07-20 | H04 | Aplicado: axioma `:8087` parse-front → loopback; **CUPS dev-1 deshabilitado** (`snap disable`, nadie imprime); netdata → `bind to = 127.0.0.1` en los 3 servers | ✅ 5 ítems en verde — health 200, ACLK de netdata intacto (`claimed`/`aclk` true en los 3) |
+| 2026-07-20 | H04 | axioma `:3700` elore: `-H` bindeó bien pero **Next pasó a redirigir el login a `https://localhost:3700`** → rollback inmediato. `curl → 200` no lo detectaba (seguía 307): **criterio de verificación ampliado al `Location` de los 3xx** | ⛔ revertido — hallazgo transversal que bloquea las 5 apps Next |
+| 2026-07-20 | H04 | dev-1 `:8087` parse: `HOSTNAME` **inerte** (corre por CLI `next start`, no standalone como axioma — mismo ecosystem, distinto binario) → revertido. dev-1 `:3000` elore: **frenado ANTES de tocar** — pasar a `fork` activaría el `--hostname localhost` ya presente, reproduciendo el fallo | ⏸ pendientes de resolver el patrón Next.js |
 
 ---
 
