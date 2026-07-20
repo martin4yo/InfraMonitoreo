@@ -1,0 +1,71 @@
+# InfraMonitoreo - rotacion de logs PM2 y de apps (axioma)
+# Estrategia: copytruncate -> NO requiere reload de PM2 ni de las apps.
+# Desplegar en /etc/logrotate.d/pm2-apps (modo 644 root:root).
+
+/home/evolutionapp/.pm2/logs/*.log /home/evolutionapp/.pm2/pm2.log {
+    su evolutionapp evolutionapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 evolutionapp evolutionapp
+}
+
+/home/mediflowapp/.pm2/logs/*.log /home/mediflowapp/.pm2/pm2.log {
+    su mediflowapp mediflowapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 mediflowapp mediflowapp
+}
+
+/root/.pm2/logs/*.log /root/.pm2/pm2.log {
+    su root root
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 root root
+}
+
+/var/log/mini/*.log {
+    su axiomacloud axiomacloud
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 axiomacloud axiomacloud
+}
+
+# ---------------------------------------------------------------------------
+# PENDIENTE 2a PASADA - logs de mini (miniapp), incluye mini-backend-out-0.log
+# (~125 MB). EXCLUIDO a proposito: el archivo contiene credenciales en claro
+# (password de usuarios, whatsappApiKey de Evolution, smtpPass de Gmail) que el
+# usuario todavia esta rotando. Es la evidencia del alcance -> NO rotar aun.
+# Para activarlo: descomentar el bloque y correr  logrotate -d  antes de aplicar.
+#
+# /home/miniapp/.pm2/logs/*.log /home/miniapp/.pm2/pm2.log {
+#     su miniapp miniapp
+#     daily
+#     rotate 7
+#     missingok
+#     notifempty
+#     compress
+#     delaycompress
+#     copytruncate
+#     create 640 miniapp miniapp
+# }
+# ---------------------------------------------------------------------------

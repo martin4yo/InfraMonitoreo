@@ -141,7 +141,38 @@ Consecuencia: la instancia `checkapp` **nunca llegó a bindear** y estuvo en **c
 
 **Decisión pendiente del usuario: completar la migración o abortarla.** Si se completa, antes hay que hacer `chown -R checkapp:checkapp` — hay **archivos `root:root` sueltos** (`.next/`, `package-lock.json`, `next.config.ts`, `public/`, `scripts/`…). Revisar aparte `cookies.txt` y **`backup_checkpoint_db.sql`** (dump de base) dentro del directorio servido por la app.
 
-**Higiene de logs (pendiente):** sin rotación — `mini-backend-out-0.log` en axioma **130 MB creciendo**; `checkpoint-web-out-0.log` 7,2 MB (ya frenado); `/var/log/mini/backend-out-1.log` 7,3 MB en dev-1.
+### 9. Credenciales en texto plano dentro de los LOGS de aplicación 🔴 (2026-07-20)
+
+Detectado al investigar por qué el log de mini en axioma pesaba 130 MB. **Es un riesgo de clase, no un caso puntual**: los logs se tratan con permisos mucho más laxos que un `.env` (`664` vs. `600`), se copian a backups, se mandan a soporte y se pegan en tickets — pero pueden contener exactamente los mismos secretos.
+
+**Causa: `console.log` que vuelcan objetos enteros.** Ningún punto loguea una credencial a propósito; viajan como campos dentro del objeto. En mini (`/var/www/mini/backend`):
+- `src/middleware/validateRequest.ts:7` → `console.log('[VALIDATE] ...', req.body)` — **middleware genérico en el camino caliente de todos los requests**: en un alta de usuario, `req.body` trae la contraseña **en claro, pre-hash**.
+- `src/middleware/validateRequest.ts:9` → la imprime **otra vez** (`validated`).
+- `src/routes/tenants.ts:154` → vuelca el objeto `settings` completo, con `smtpPass` y `whatsappApiKey`.
+
+**Qué se filtró (axioma):** `whatsappApiKey` de **Evolution API** (instancia `laslomas` — el endpoint corre en el mismo server), `smtpPass` de **Gmail** (`info.viverolaslomas@gmail.com`, app-password), y **12 contraseñas de 4 usuarios** de `nutriarroz`. Alcance temporal acotado: las contraseñas son de **77 segundos del 2026-07-07** (un alta masiva). También 1.421 CUIT/DNI y 208 emails (PII). Los 1.737 números que parecían tarjetas son **CAE de AFIP** — falso positivo descartado.
+
+**Exposición real:** el log es `664` pero `/home/miniapp` está en `750`, que corta el traverse → hoy solo `miniapp` y root llegan. **Defensa frágil**: un `chmod 755` del home expondría todo a los 8 usuarios de apps del server. Mismo patrón que H06 (archivo protegido solo por el permiso del directorio padre).
+
+**Panorama por app** (barrido parcial): **mini** (winston SIN redacción, 7 volcados) y **hub** (winston SIN redacción, 2 volcados) son los casos a corregir; mediflow, parse, axio y elore ya redactan o no vuelcan. Aparte, `evolution-api-out.log` en axioma (**246,7 MB**) tiene `token` ×14 y `password` ×3 — es software de terceros, el fix es de verbosidad, no de código propio.
+
+**Fix (repo de la aplicación, NO infra — lo hace quien mantiene mini):** (1) borrar o condicionar los 3 `console.log`; (2) **estructural**: centralizar en winston con lista de redacción (`password`, `smtpPass`, `whatsappApiKey`, `token`, `apiKey`, `secret`, `authorization`) — sin esto, el próximo `console.log(req.body)` reintroduce el problema. **Rotar el log NO lo arregla.**
+
+**Credenciales a rotar, priorizadas:** (1) `whatsappApiKey` de Evolution — da control sobre el WhatsApp del cliente; (2) `smtpPass` de Gmail — permite enviar correo en su nombre (phishing); (3) contraseñas de los 4 usuarios de `nutriarroz`. **Rotar ANTES de truncar el log**, que es la evidencia del alcance.
+
+**Hallazgo colateral (para el repo de mini):** el frontend poletea `GET /api/<tenant>/mercadopago/recent-payments` **cada 15 s** (mediana medida) por tenant y pestaña → **152.633 requests en 47 días desde 9 tenants**, y la tabla `mercadopago_config` está **completamente vacía**: el **100% del tráfico es inútil** y golpea la DB para devolver vacío. La guarda natural es no montar el polling si el tenant no tiene fila activa; existe `src/routes/mercadopago-webhooks.ts` como reemplazo correcto.
+
+### 10. Rotación de logs 🟡 ✅ DESPLEGADA (2026-07-20)
+
+**No había ninguna rotación en los 5 servers** (ni `logrotate.d` ni el módulo `pm2-logrotate`). Se eligió **logrotate nativo con `copytruncate`** sobre `pm2-logrotate`: no toca el God Daemon de PM2, no requiere reload, y el rollback es borrar un archivo. Config versionada en [`logrotate/`](../logrotate/) (una por server) — `daily`, `rotate 7`, `compress`+`delaycompress`, `su <user> <group>`, `create 640`.
+
+**⚠ Hallazgo central — `~/.pm2/logs/*.log` NO alcanza.** El stdout real de las apps va a **`~/.pm2/pm2.log`**, un nivel arriba. Un inventario de `logs/` da el relevamiento por completo y deja sin rotar el archivo que importa: en dev-1 había un **`pm2.log` de 2,07 GB** (el mayor de la infra, 9× el de evolution-api), alimentado por los **1.117.267 arranques** del crash loop de checkpoint-web. **Se detecta con `/proc/<pid>/fd/1`**, que muestra a dónde apunta realmente el descriptor de salida.
+
+**⚠ Criterio de verificación corregido.** "Archivo activo en 0 bytes tras 60 s" **NO prueba que `copytruncate` falló** — puede ser simplemente que la app no emite stdout. La prueba concluyente es **escribir al descriptor**: `echo TEST >> /proc/<pid>/fd/1` y confirmar que el archivo crece. Con el criterio ingenuo se revertirían rotaciones correctas y se reiniciarían apps sanas.
+
+**Otros gotchas:** logrotate **ignora en silencio** cualquier config writable por grupo/otros → los archivos van `644 root:root`. Los globs `/home/*/...` **no sirven** acá: los dirs `.pm2` son `775` y logrotate exige `su`, que no puede declararse por usuario en un glob → configs específicas por server. Y **`create` no aplica con `copytruncate`** (trunca el existente, no crea uno nuevo): el `640` rige sobre los rotados, los activos necesitan `chmod` explícito.
+
+**Estado:** desplegado y verificado en los 5. dev-1 con rotación forzada (2,07 GB copiados en 59 s, apps en 200, `restart_time` sin cambios, fd verificado sano); axioma y el resto rotan naturalmente a las 00:00. **mini en axioma queda EXCLUIDO** (bloque comentado) hasta que se roten las credenciales del §9. Espacio recuperado: **0 hoy** por `delaycompress` — los ~2,2 GB de dev-1 se liberan en la corrida siguiente. **Verificar mañana** que la rotación de las 00:00 corrió y comprimió.
 
 ### 6. Credenciales R2 🟡 → ✅ TOKEN ROTADO (2026-07-17)
 `repo2-s3-key-secret` + `repo2-cipher-pass` en texto plano en `/etc/pgbackrest/pgbackrest.conf`; además se expusieron en una sesión el 2026-07-17. **Hecho**: rotado el API token R2 (viejo `a8790e48…` borrado en Cloudflare, nuevo `b47676fd…` aplicado en los **5 archivos** con backup), verificado con `pgbackrest check` en las 4 stanzas; `cipher-pass` conservado; credenciales cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). Ver `pgbackrest-setup.md`. **Cerrado (2026-07-19, H03 del plan de remediación).** Se evaluaron las 3 opciones (mantener+endurecer / archivo dedicado `600` vía `config-include-path` / variables `PGBACKREST_*`) y se eligió **mantener en el `.conf` + endurecer**: pgBackRest siempre necesita el secreto en claro en ejecución, así que mover a otro archivo owner-only es ganancia marginal frente a editar 5 configs productivas, y las env vars serían **peores** (legibles en `/proc/<pid>/environ`).

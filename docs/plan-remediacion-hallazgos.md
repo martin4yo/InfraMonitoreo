@@ -810,11 +810,41 @@ primero**; a prod solo va lo que buildeó y pasó health; una app (hub), una ven
 - [x] Foto `npm audit --json` back+front en checkout de trabajo + clasificación por severidad (lectura) → **61 vulns (3 critical / 20 high)**
 - [x] `npm audit fix` (no-breaking) en el checkout + build + tests → **61→11**; requirió fix de 2 líneas por el bump de axios; **57/57 tests PASS**
 - [x] Evaluar majors que requieran `--force`, una a una → **ninguno aplicado** (los 3 restantes solo ofrecen downgrade) + justificación por severidad
-- [ ] **Decidir con el usuario:** ¿el deploy incluye el fix de tipos + la mitigación de `pdfjs`? (implica commit en ProHub)
-- [ ] Backup: tar `/var/www/hub` + `pg_dump hub_db` + `dump.pm2`
-- [ ] ⚠ Desplegar a `/var/www/hub` como `hubapp` + `pm2 reload` + `chown -R` final — **OK explícito**
-- [ ] Verificar: 0 critical + hub health/login OK + `find -not -user hubapp` vacío + **prueba real de S3 y de mail**
+- [x] **Decidido:** deploy con lockfile + fix de tipos + **mitigación de `pdfjs`** (el usuario confirmó que hub **no es productiva** — publicada pero sin usuarios reales)
+- [x] Backup: tar `/var/www/hub` + `pg_dump hub_db` + `dump.pm2` → `/var/backups/hub-h13-predeploy-20260720-164637.*`
+- [x] ⚠ Desplegado a `/var/www/hub` como `hubapp` + `pm2 reload` + `chown -R` final
+- [x] Verificar: **0 critical** + health/login OK + `find -not -user hubapp` **vacío** + prueba real de mail y de parseo PDF (**S3: N/A, ver abajo**)
 - [ ] Documentar rutina mínima de higiene (npm audit por deploy/mensual)
+
+> **✅ DESPLEGADO Y VERIFICADO (2026-07-20).** Sin rollback. Commit `67a9d83` sobre `311a6ed`, **local sin push**
+> (se desplegó copiando los 4 archivos, no con `git pull` — eso además evitó pisar los `sw.js`/`workbox-*.js`
+> sin commitear que prod tenía por el build).
+>
+> **Verificación:** `hub.axiomacloud.com` **200** · `api.hub.axiomacloud.com/health` **200** · `/auth/login` **200** ·
+> login → **401 `Invalid credentials`** (prueba que **Prisma consulta la tabla `User` OK** — era el riesgo real del
+> engine 7.1.1 con client 6.19.0) · `npm audit` en prod → **11 vulns, 0 critical** · `find -not -user hubapp` **vacío** ·
+> `pm2-hubapp` enabled+active, sin restart loop. Aplicado el criterio ampliado del incidente de H04: se verificó el
+> **`Location`** de cada 3xx (el único es 80→443 y apunta al dominio público, no a `localhost`).
+>
+> **Los 2 riesgos que no se podían validar desde el checkout:**
+> 1. **AWS SDK — el riesgo NO existía.** hub **no usa el SDK**: 0 imports de `@aws-sdk` en `backend/src`,
+>    `frontend/src`, `shared` y en el `dist` compilado. Está declarado en el manifiesto pero nunca se importa; los
+>    archivos se guardan **en disco local vía multer** (`process.cwd()/uploads`). → **No hay flujo de S3 que probar.**
+>    Dos consecuencias: son **~85 paquetes de peso muerto** removibles del manifiesto, y las credenciales
+>    `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` del `.env` **no las usa nadie** → **revisar si siguen activas en AWS
+>    y revocarlas**.
+> 2. **Mail — PASS real**: `SMTP verify OK` + `sendMail OK`, aceptado por Gmail. **Mitigación de `pdfjs` validada**
+>    con un parseo real (3819 chars) → la vuln explotable vía PDFs del portal de proveedores queda cerrada.
+>
+> **`ts-node`: el fix no era donde parecía.** Agregarlo a las `devDependencies` de backend y frontend **no alcanza** —
+> jest lo resuelve desde la **raíz del monorepo**. Movido a la raíz, la suite corre sin trucos por primera vez.
+>
+> **Confirmado en vivo el error del plan:** `prisma generate` desde la raíz **falla**; desde `backend/` funciona.
+>
+> **Hallazgo colateral (no tocado, requiere OK aparte):** el `/var/www/hub/backend/.env` está **malformado** —
+> línea 13: `JWT_SECRET=<...>==# AWS S3 (configurar cuando sea necesario)`, comentario pegado al valor sin salto de
+> línea. `dotenv` lo tolera, pero **rompe cualquier `source`/`set -a` desde bash** (`syntax error near unexpected
+> token '('`) → va a morder a cualquier script de deploy o backup que lea el `.env` desde shell.
 
 ---
 
