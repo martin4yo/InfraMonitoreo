@@ -213,6 +213,10 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 - [x] **Boot test OK**: tras `pm2 kill` + `systemctl start pm2-hubapp` desde cero → `is-active: active`, ambos procesos online, health 200. hub sobrevive un reboot.
 - [x] **Login funcional** (2026-07-17): tras resolver 2 problemas de DB encadenados, `POST /api/auth/login` responde 401 a credenciales inválidas (comportamiento correcto), ya no 500. Falta que el usuario pruebe con credenciales reales desde el browser.
 
+  **NOTA (2026-07-17):** la corrida asistida dejó hub arrancando pero con 2 problemas que el usuario tuvo que terminar de arreglar con un deploy manual, ahora incorporados como reglas del estándar (§3 archivos, §9 DB):
+  - **237 archivos con owner `root`** en `/var/www/hub` (de git/npm corridos como root en deploys previos) → rompían build/runtime. Fix: `chown -R hubapp:hubapp /var/www/hub` (verificado 0 archivos no-hubapp).
+  - **`hubuser` sin ownership de la DB** (solo grants parciales) → tras `db push` como postgres, tablas quedaban sin permiso. Fix: `hubuser` hecho **owner** de `hub_db` + 87/87 tablas + secuencias + tipos + schema. Regla: `<app>user` full owner, no solo grants.
+
   **Problemas de DB resueltos (post-arranque):**
   1. **`hub_db` desincronizada con el código** (no era productiva): al `User` le faltaban columnas que el código usa (`whatsappPhone`, `mustChangePassword`) → login daba 500 (`P2022 column does not exist`). Fix: **`prisma db push --accept-data-loss`** (como owner postgres) → DB sincronizada al `schema.prisma`. Autorizado porque la base NO estaba productiva.
   2. **Permisos**: el `db push` como postgres dejó las tablas con owner postgres; `hubuser` (rol de la app) perdió acceso → `42501 permission denied for table User`. Fix: `GRANT ALL ON ALL TABLES/SEQUENCES IN SCHEMA public TO hubuser` + `ALTER DEFAULT PRIVILEGES` (para futuros push/migrate). **Aprendizaje para el redeploy:** tras un `db push`/`migrate` ejecutado como owner distinto al de la app, re-otorgar grants al rol de la app.

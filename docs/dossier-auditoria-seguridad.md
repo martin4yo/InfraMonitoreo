@@ -9,10 +9,11 @@
 > `InfraMonitoreo` (y su repo hermano `infra-secrets`). Cuando un control esperado por el auditor
 > **no existe como documento o implementación**, se marca explícitamente como **gap**.
 >
-> **Fecha de compilación:** 2026-07-18 · **Responsable técnico:** mfourgeaux@axiomacloud.com
+> **Fecha de compilación:** 2026-07-18 · **Última actualización de estado:** 2026-07-20
+> **Responsable técnico:** mfourgeaux@axiomacloud.com
 > **Fuentes primarias:** `docs/hardening.md`, `docs/disaster-recovery-plan.md`,
 > `docs/drp-app-hub-drill.md`, `docs/restore-drill-procedure.md`, `docs/pgbackrest-setup.md`,
-> `docs/setup-netdata-cloud.md`, `docs/estandar-despliegue.md`,
+> `docs/setup-netdata-cloud.md`, `docs/estandar-despliegue.md`, `docs/plan-remediacion-hallazgos.md`,
 > `docs/plan-estandarizacion-y-redespliegue.md`, `docs/plan-trabajo-estandarizacion.md`,
 > `docs/nginx-anti-scanner.md`, `README.md`, `netdata/`, `scripts/`, `docs/drill-history.csv`.
 
@@ -25,19 +26,29 @@ sólida y verificada** — los tres riesgos críticos de superficie de ataque (a
 credenciales de backup expuestas) fueron cerrados en los 5 servers el 2026-07-17 — y una
 **capacidad de recuperación de datos probada** mediante backups dual-repo cifrados off-site
 (pgBackRest → dev-1 SSH + Cloudflare R2) con restore drills que validan recuperación con WAL replay
-hasta minutos antes de un evento. La brecha principal **no es técnica sino de gobierno**: no existen
-todavía documentos formales de política de seguridad, gestión de riesgos, gestión de
-vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos técnicos menores de defensa
-en profundidad (pg_hba amplio en un server, servicios en `0.0.0.0`, credenciales R2 en texto plano
-en los `.conf`). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con
-notificaciones centralizadas.
+hasta minutos antes de un evento. En la pasada de remediación del 19–20 de julio se cerraron además
+la exposición de credenciales R2 en respaldos (H03), la cadencia de restore drills con las **3 stanzas
+productivas en PASS** (H07) y parte del rebindeo de servicios a loopback (H04). La brecha principal
+**no es técnica sino de gobierno**: no existen todavía documentos formales de política de seguridad,
+gestión de riesgos, gestión de vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos
+técnicos de defensa en profundidad (pg_hba amplio en un server, apps Next.js aún en `0.0.0.0`,
+propiedad de archivos en una app productiva).
+
+> **Nota de transparencia para el auditor.** El hallazgo H06 (permisos de `.env`) fue declarado
+> cerrado el 2026-07-18 y **reabierto el 2026-07-20**: la verificación original era insuficiente
+> (se validó un solo server y contra el proceso ya en ejecución, en vez de contra el próximo
+> arranque y en los 5 servers), y un cierre posterior derivado de ese criterio provocó un
+> **incidente en producción**. El criterio de verificación fue corregido y la re-auditoría en los
+> 5 servers detectó exposiciones que el cierre original no había visto (ver §7 y §7.1). Se deja
+> registrado deliberadamente: la capacidad de detectar y revertir un falso verde es parte de la
+> evidencia de control.
 
 ### Tabla de madurez por dominio
 
 | Dominio | Semáforo | Fundamento |
 |---|---|---|
-| Seguridad / Hardening | 🟡 Amarillo | Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado). Pendientes menores de defensa en profundidad (pg_hba `0.0.0.0/0` en axioma, apps en `0.0.0.0`, creds R2 en claro). |
-| Monitoreo | 🟢 Verde | Netdata Cloud v2.10.4 claimed en los 5; colectores PG/nginx/httpcheck/apps + alarmas custom; notificaciones Telegram+Email. Gap menor: alarma de antigüedad de backup pgBackRest documentada pero no desplegada. |
+| Seguridad / Hardening | 🟡 Amarillo | Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado) y respaldos con credenciales purgados (H03, 07-19). Pendientes de defensa en profundidad: pg_hba `0.0.0.0/0` en axioma (H01), 5 apps Next.js aún en `0.0.0.0` (H04, bloqueado por un patrón del framework), propiedad de archivos de mini/axioma (H06, requiere ventana). |
+| Monitoreo | 🟢 Verde | Netdata Cloud v2.10.4 claimed en los 5; colectores PG/nginx/httpcheck/apps + alarmas custom; notificaciones Telegram+Email. La alarma de antigüedad de backup pgBackRest se verificó **desplegada y en CLEAR** desde 2026-05-26 (H08 cerrado 07-18). Rotación de logs PM2 desplegada en los 5 (07-20). |
 | Backup | 🟢 Verde | Dual-repo pgBackRest 2.58.0: repo1 SSH dev-1 + repo2 R2 **cifrado** off-site; retención full=4/diff=7; cron full/diff/incr; `verify` disponible. |
 | DRP (recuperación) | 🟡 Amarillo | DRP de DB formal (4 escenarios, RPO/RTO, checklist post-restore) + DRP de aplicación en definición (drill hub→axioma-drp). Drills de restore ejecutados y registrados, pero **cadencia mensual aún no sostenida** (últimas corridas 2026-07-04). |
 | Gestión de secretos | 🟢 Verde | SOPS+age: 15 `.env` cifrados por-valor en repo privado `infra-secrets`; clave age fuera de banda; roundtrip verificado. Gap: creds R2 que lee pgBackRest siguen en texto plano en los `.conf` (SOPS es copia custodiada, no el origen). |
@@ -153,15 +164,15 @@ notificaciones centralizadas.
 |---|---|---|---|---|
 | **1** — Inventario de activos | Inventario de hardware/servidores y su rol | Inventario cerrado de 5 servers + apps + bases por stanza | `plan-estandarizacion-y-redespliegue.md` §2; DRP Apéndice A; `disaster-recovery-plan.md` §1.1 | ✅ |
 | **2** — Inventario de software | Software autorizado, apps por server, runtime fijado | Inventario de apps + versión Node por app en manifiesto; PG/pgBackRest unificados | `estandar-despliegue.md` §10; plan §2 | 🟡 (manifiestos por app aún no completos, F7) |
-| **3** — Protección de datos | Backups cifrados off-site; secretos cifrados; TLS | pgBackRest repo2 R2 cifrado AES-256; SOPS+age para `.env`; TLS Let's Encrypt en apps públicas | `pgbackrest-setup.md`; plan §3 (SOPS); `estandar-despliegue.md` §6,§8 | 🟡 (creds R2 en claro en `.conf` — H03) |
-| **4** — Configuración segura | Hardening de host: SSH, firewall, servicios en loopback, permisos | SSH sin root/pass (5/5); ufw default-deny (5/5); `.env` 600; PG en loopback (mayoría); anti-scanner nginx; **regla de propiedad de archivos** (`/var/www/<app>` todo `<app>app:<app>app`, verificable con `find -not -user`) formalizada en el estándar | `hardening.md` (comparativa 5 servers); `nginx-anti-scanner.md`; `estandar-despliegue.md` §3 (owner de archivos) | 🟡 (apps en `0.0.0.0` — H04; pg_hba axioma — H01) |
+| **3** — Protección de datos | Backups cifrados off-site; secretos cifrados; TLS | pgBackRest repo2 R2 cifrado AES-256; SOPS+age para `.env`; TLS Let's Encrypt en apps públicas | `pgbackrest-setup.md`; plan §3 (SOPS); `estandar-despliegue.md` §6,§8 | 🟡 (creds R2 en claro en los `.conf` vivos, protegidos por `640`+owner+fw; los `.bak` con credenciales pre-rotación fueron purgados — H03 cerrado 07-19) |
+| **4** — Configuración segura | Hardening de host: SSH, firewall, servicios en loopback, permisos | SSH sin root/pass (5/5); ufw default-deny (5/5); `.env` 600; PG en loopback (mayoría); anti-scanner nginx; **regla de propiedad de archivos** (`/var/www/<app>` todo `<app>app:<app>app`, verificable con `find -not -user`) formalizada en el estándar | `hardening.md` (comparativa 5 servers); `nginx-anti-scanner.md`; `estandar-despliegue.md` §3 (owner de archivos) | 🟡 (pg_hba axioma — H01; 5 apps Next.js en `0.0.0.0` — H04 parcial; propiedad de archivos de mini/axioma — H06 parcial) |
 | **5** — Gestión de cuentas | Cuentas de servicio dedicadas, sin cuentas ajenas activas; mínimo privilegio en DB | Usuario dedicado `<app>app` por app (no root); `linuxadmin` ajeno bloqueado en drp (`passwd -l`); **regla de propiedad en DB** (`<app>user` owner de la base y de todas las tablas/secuencias/tipos, no solo GRANT) formalizada en el estándar | `estandar-despliegue.md` §2, §9 (owner de DB); `hardening.md` (drp) | 🟡 (axio-ml corre como `axiomacloud`; falta matriz formal de cuentas) |
 | **6** — Gestión de accesos | Acceso remoto solo por llave; MFA/CA; restricción por IP | SSH solo `axiomacloud` por pubkey (5/5); CA Smallstep en dev-1 (`80-step.conf`); pg_hba de axiodemo restringido a IP de dev-1 | `hardening.md` §3 + comparativa; `pgbackrest-setup.md` (confianza SSH) | ✅ (host); 🟡 (accesos de app fuera de alcance) |
 | **8** — Gestión de logs de auditoría | Logs de acceso, detección de brute-force, retención | fail2ban en los 5 (backend=systemd/journald donde aplica); access.log nginx; anti-scanner filtra ruido; journald | `hardening.md` (fail2ban drp/dev-1); `nginx-anti-scanner.md` | 🟡 (sin agregación central de logs ni política de retención documentada) |
-| **11** — Recuperación de datos | Backups probados, restore drills, DRP documentado | DRP de DB (4 escenarios, RPO/RTO); restore drill con WAL replay auto-evaluante + registro CSV; `pgbackrest verify` | `disaster-recovery-plan.md`; `restore-drill-procedure.md`; `drill-history.csv` | 🟡 (cadencia mensual de drills no sostenida — H07) |
-| **12** — Gestión de infra de red | Firewall, segmentación de puertos, servicios expuestos mínimos | ufw default-deny allowlist SSH/80/443 (5/5); snmpd acotado a IPs dattaweb en dev-1; puertos de monitoreo salientes | `hardening.md` §2 + comparativa + Pendientes dev-1 | 🟡 (servicios en `0.0.0.0` mitigados por fw pero no rebindeados — H04) |
-| **13** — Monitoreo y defensa de red | Monitoreo de recursos/servicios/disponibilidad + alertas | Netdata Cloud multicapa (5/5); alarmas custom apps_http + pgbackrest; notificación Telegram/Email | `README.md`; `setup-netdata-cloud.md`; `netdata/health.d/*` | 🟢 (gap menor: alarma antigüedad backup no desplegada — H08) |
-| **7** — Gestión de vulnerabilidades | Escaneo y remediación de vulnerabilidades | — (solo `npm audit` de hub registrado como pendiente) | `plan-trabajo-estandarizacion.md` (hub: 47 backend/18 frontend) | 🔴 gap (ver §8) |
+| **11** — Recuperación de datos | Backups probados, restore drills, DRP documentado | DRP de DB (4 escenarios, RPO/RTO); restore drill con WAL replay auto-evaluante + registro CSV; `pgbackrest verify` | `disaster-recovery-plan.md`; `restore-drill-procedure.md`; `drill-history.csv` | 🟢 (las **3 stanzas productivas en PASS** el 2026-07-19 — 1ª corrida registrada de AxiomaCloudProd y clubix; H07 cerrado. Pendiente: sostener la cadencia mensual en el tiempo) |
+| **12** — Gestión de infra de red | Firewall, segmentación de puertos, servicios expuestos mínimos | ufw default-deny allowlist SSH/80/443 (5/5); snmpd acotado a IPs dattaweb en dev-1; puertos de monitoreo salientes | `hardening.md` §2 + comparativa + Pendientes dev-1 | 🟡 (rebindeo parcial 07-20: parse-front axioma → loopback, CUPS dev-1 deshabilitado, netdata → loopback en los 3. Quedan 5 apps Next.js en `0.0.0.0`, mitigadas por fw — H04) |
+| **13** — Monitoreo y defensa de red | Monitoreo de recursos/servicios/disponibilidad + alertas | Netdata Cloud multicapa (5/5); alarmas custom apps_http + pgbackrest; notificación Telegram/Email | `README.md`; `setup-netdata-cloud.md`; `netdata/health.d/*` | 🟢 (alarma de antigüedad de backup verificada **desplegada y en CLEAR** desde 2026-05-26 — H08 cerrado) |
+| **7** — Gestión de vulnerabilidades | Escaneo y remediación de vulnerabilidades | Remediación de hub ejecutada y validada en checkout aislado: **61 → 11 vulnerabilidades, críticas 3 → 0**, sin `--force`, con 57/57 tests en PASS. **Aún no desplegada** (requiere commit en el repo de la app). Sigue sin proceso periódico formal | `plan-remediacion-hallazgos.md` (H13); `plan-trabajo-estandarizacion.md` | 🔴 gap de proceso (ver G4); remediación puntual lista pero no desplegada |
 | **17** — Respuesta a incidentes | Plan formal, roles, comunicación | Flujo de comunicación por escenario en el DRP; sin plan de respuesta a incidentes formal e independiente | `disaster-recovery-plan.md` §3 (parcial) | 🔴 gap (ver §8) |
 
 ---
@@ -201,33 +212,78 @@ notificaciones centralizadas.
 | 2026-05-29 | axiodemo | repo2 | 14s | 1 min | PASS |
 | 2026-07-04 | axiodemo | R2 (repo1 local) | 15s | 0 min | PASS |
 | 2026-07-04 (x2) | axiodemo | R2 | 13–15s | 0 min | PASS |
+| 2026-07-19 12:26 / 12:51 | AxiomaCloudProd, clubix | R2 | 49–79s | — | **FAIL** (bug del drill — ver nota) |
+| 2026-07-19 20:08 | **AxiomaCloudProd** | R2 | 71s | 0 min | **PASS** (1ª corrida registrada) |
+| 2026-07-19 20:08 | **clubix** | R2 | 44s | 1 min | **PASS** (1ª corrida registrada) |
+| 2026-07-19 20:08 | axiodemo | R2 | 11s | 1 min | PASS |
 
 - El drill valida end-to-end: descarga R2 → descifrado AES → descompresión → **WAL replay completo** → promoción, con umbral de frescura de WAL de 30 min. Auto-evaluante (`exit 0/1`), registro automático en `drill-history.csv`.
-- **Observación de auditoría (H07):** los drills registrados son **solo de la stanza axiodemo**; AxiomaCloudProd y clubix aún no tienen corrida registrada, y la cadencia mensual comprometida no está sostenida (última corrida 2026-07-04).
+- **Sobre los FAIL del 2026-07-19 (transparencia).** Las 4 corridas en FAIL de las 12:26 y 12:51 quedan deliberadamente en el registro. La causa fue diagnosticada como un **defecto del script de drill, no de los backups**: el `pg_hba` del entorno de restore se copiaba del cluster local (con `scram`), provocando rechazo por autenticación, y la comprobación de conectividad no esperaba al WAL replay. Corregido `scripts/70-restore-drill.sh` y re-ejecutado a las 20:08 con las **3 stanzas en PASS**. Los backups nunca estuvieron comprometidos; lo que falló fue el instrumento de verificación.
+- **Estado de H07 (cerrado 2026-07-19):** AxiomaCloudProd y clubix tienen ahora su **primera corrida registrada en PASS** (585 y 178 tablas restauradas, WAL al día), junto a axiodemo (34 tablas). Queda como compromiso vivo **sostener la cadencia mensual** — un solo ciclo cumplido no constituye todavía evidencia de cadencia.
 
 ---
 
 ## 7. Registro de hallazgos y remediación
 
-> Severidad: 🔴 alta · 🟡 media · 🟢 baja. Estado: pendiente / en curso / ✅ corregido (fecha).
+> Severidad: 🔴 alta · 🟡 media · 🟢 baja. Estado: pendiente / en curso / ⚠ reabierto / ✅ corregido (fecha).
+> **Estado consolidado al 2026-07-20:** 8 cerrados · 2 parciales (H04, H06) · 1 bloqueado por tercero (H09) · 3 pendientes (H01, H11, H13).
 > Owner por defecto: mfourgeaux@axiomacloud.com (responsable técnico único actual — ver gap G2 en §8).
 
 | # | Hallazgo | Server(s) | Dominio CIS | Sev | Estado | Owner |
 |---|---|---|---|---|---|---|
 | H01 | `pg_hba.conf`: `host all all 0.0.0.0/0 md5` (cualquier IP puede intentar conectar; md5 en vez de scram) | axioma | CIS 3, 4, 6 | 🔴→🟡 | **pendiente** (mitigado en la práctica: PG bindea a `127.0.0.1` + ufw bloquea 5432; falta corregir a nivel config y migrar a scram-sha-256) | martin4yo |
 | H02 | Firewall ausente (ufw inactive) | axioma, clubix, dev-1, axioma-drp | CIS 4, 12 | 🔴 | ✅ **corregido 2026-07-17** (ufw default-deny + allowlist en los 5; axiodemo ya lo tenía) | martin4yo |
-| H03 | Credenciales R2 (`s3-key-secret`, `cipher-pass`) en texto plano en `pgbackrest.conf` + expuestas en sesión | dev-1, axioma, clubix, axiodemo (+drp) | CIS 3 | 🟡 | ✅ **token rotado 2026-07-17** (viejo borrado en Cloudflare, nuevo en 5 archivos, verificado con `pgbackrest check`; custodia SOPS). **Pendiente menor:** siguen en claro en los `.conf` que lee pgBackRest (protegidos por 640 + fw) | martin4yo |
-| H04 | Puertos de app escuchando en `0.0.0.0` en vez de `127.0.0.1` (salteando nginx/TLS/headers) | axioma (`:8087` parse-front), dev-1 (`:3000/5000/8086/8087/8089`, CUPS `:631`, netdata `:19999`), axiodemo (`:5300`) | CIS 4, 12 | 🟡 | **pendiente** (defensa en profundidad; **mitigado por ufw** que tapa esos puertos; rebindear a loopback en Fase 4/5) | martin4yo |
+| H03 | Credenciales R2 (`s3-key-secret`, `cipher-pass`) en texto plano en `pgbackrest.conf` + expuestas en sesión | dev-1, axioma, clubix, axiodemo (+drp) | CIS 3 | 🟡 | ✅ **cerrado 2026-07-19** — token rotado 07-17 (viejo borrado en Cloudflare, nuevo en 5 archivos, verificado con `pgbackrest check`; custodia SOPS). El relevamiento del 07-19 mostró que los `.conf` vivos ya estaban en `640`+owner correcto y que la superficie real eran **4 `.bak` con credenciales pre-rotación**: respaldados en un tar `600` root-only y **borrados los 4** (+2 residuos). Resultado: 0 `.bak` en los 5 servers, `check` OK en las 4 stanzas, ningún `.conf` vivo tocado. **Residual aceptado:** las credenciales siguen en claro en los `.conf` que pgBackRest debe leer (limitación del producto), mitigado por `640` + owner + firewall | martin4yo |
+| H04 | Puertos de app escuchando en `0.0.0.0` en vez de `127.0.0.1` (salteando nginx/TLS/headers) | axioma (`:8087` parse-front), dev-1 (`:3000/5000/8086/8087/8089`, CUPS `:631`, netdata `:19999`), axiodemo (`:5300`) | CIS 4, 12 | 🟡 | **parcial 2026-07-20** — el relevamiento confirmó que **todos los `proxy_pass` ya apuntan a loopback** (el riesgo principal no existía). Rebindeados en verde: `:8087` parse-front (axioma), **CUPS `:631` deshabilitado** en dev-1 (nadie imprime), netdata `:19999` → `bind to = 127.0.0.1` en los 3 (ACLK intacto). **Bloqueadas 5 apps Next.js:** el flag `-H` bindea pero hace que Next redirija el login a `https://localhost:<port>` → revertido de inmediato en producción; `HOSTNAME` es inerte fuera de standalone. Sigue **mitigado por ufw**, que tapa esos puertos desde afuera | martin4yo |
 | H05 | SSH con `PermitRootLogin yes` + `PasswordAuthentication yes` (root por fuerza bruta) | axioma, clubix, dev-1 (custom.conf); axiodemo (50-cloud-init) | CIS 4, 6 | 🔴 | ✅ **corregido 2026-07-17** (root+pass `no`, solo pubkey, en los 5; drop-in `00-hardening`) | martin4yo |
-| H06 | `.env` con permisos laxos (777/664/644/755) en vez de 600 | axioma, dev-1, axiodemo | CIS 3, 4 | 🟡 | ✅ **corregido 2026-07-18** (los `.env` de app en los 3 servers en 600 con owner alineado al proceso; en dev-1 mediflow→`root`, checkpoint→`axiomacloud`, con backup). Migrar mediflow/checkpoint a usuario dedicado sigue en Fase 5 (no es de permisos) | mfourgeaux |
-| H07 | Cadencia mensual de restore drills no sostenida; solo stanza axiodemo con corridas registradas (AxiomaCloudProd/clubix sin drill registrado) | infra (backup) | CIS 11 | 🟡 | **pendiente** (correr drill de las 3 stanzas prod y registrar; última corrida 2026-07-04) | martin4yo |
-| H08 | Alarma de antigüedad de backup pgBackRest (colector statsd custom) documentada pero **no desplegada** | dev-1 (repo host) | CIS 11, 13 | 🟡 | **pendiente** (config `netdata/health.d/pgbackrest.conf` + colector `netdata/pgbackrest/` listos en repo; falta desplegar con `scripts/30-...`) | martin4yo |
-| H09 | snmpd con community `public` y `agentaddress` público en dev-1 | dev-1 | CIS 4, 12 | 🟡 | **pendiente** (mitigado: ufw permite 161 solo desde IPs dattaweb; falta `agentaddress 127.0.0.1` + cambiar community) | martin4yo |
+| H06 | `.env` con permisos laxos (777/664/644/755) en vez de 600 | axioma, dev-1, axiodemo | CIS 3, 4 | 🟡 | ⚠ **REABIERTO 2026-07-20** — el cierre del 07-18 fue un **falso verde** (ver §7.1). Re-auditado en los 5 servers. **Cerrado desde entonces:** `axio/.env` en dev-1 (7 archivos en `664` world-readable → `600 axioapp:axioapp`; los leían los 8 usuarios de apps del server — control negativo `hubapp` NO_LEE); **mini/dev-1 migrada a `miniapp`** con ~90 directorios en `777` → `750`/`755`, `find -not -user miniapp` vacío, health 200; mini/axioma backend `.env` → `600 miniapp:miniapp`. **Pendiente:** el `chown -R` del árbol de mini en axioma **requiere ventana** (server productivo) | mfourgeaux |
+| H07 | Cadencia mensual de restore drills no sostenida; solo stanza axiodemo con corridas registradas (AxiomaCloudProd/clubix sin drill registrado) | infra (backup) | CIS 11 | 🟡 | ✅ **cerrado 2026-07-19** — las **3 stanzas productivas en PASS** (585/178/34 tablas, WAL al día); 1ª corrida registrada de AxiomaCloudProd y clubix. Los FAIL previos del mismo día se diagnosticaron como **bug del drill, no de los backups** (`pg_hba` con `scram` copiado del cluster local + chequeo que no esperaba el replay); `70-restore-drill.sh` corregido. **Compromiso vivo:** sostener la cadencia mensual | martin4yo |
+| H08 | Alarma de antigüedad de backup pgBackRest (colector statsd custom) documentada pero **no desplegada** | dev-1 (repo host) | CIS 11, 13 | 🟡 | ✅ **cerrado 2026-07-18** — el hallazgo era **incorrecto**: el monitoreo ya estaba desplegado en dev-1 desde el **2026-05-26** (colector `pgbackrest-collect.py` + cron 15 min + `health.d` + `statsd.d`), con charts poblados y alarmas en CLEAR. Solo se reconcilió el colector del repo con la versión multi-repo del server (md5 idéntica); **sin tocar dev-1** | martin4yo |
+| H09 | snmpd con community `public` y `agentaddress` público en dev-1 | dev-1 | CIS 4, 12 | 🟡 | ⏸ **bloqueado por dependencia de tercero (2026-07-19)** — el relevamiento confirmó que la community `public` ya está acotada por `com2sec` a 2 IPs de dattaweb, y `tcpdump` probó que **el proveedor consulta cada ~1s y snmpd responde**: bindear a loopback o cambiar la community **cortaría el monitoreo contratado**. Requiere coordinar la nueva community con dattaweb. Mitigado por ufw (161 solo desde esas IPs) | martin4yo |
 | H10 | Usuario ajeno de provisioning `linuxadmin` (password+sudo+llave de terceros) | axioma-drp | CIS 5, 6 | 🟡 | ✅ **mitigado 2026-07-17** (`passwd -l` bloquea password/brute-force; usuario+sudo conservados para emergencia, solo entra por llave) | martin4yo |
 | H11 | `axio-ml` corre como `axiomacloud` (owner ≠ app), no usuario dedicado | axiodemo | CIS 5 | 🟢 | **pendiente** (normalizar a usuario dedicado + hook ollama, Fase 6) | martin4yo |
 | H12 | Deploy de `axio` en axiodemo con `origin` mal apuntado (a ProHub, repo de hub) → un `deploy.sh` con credencial arreglada traería hub y rompería axio en prod | axiodemo | CIS 2 (integridad de deploy) | 🟡 | ✅ **corregido 2026-07-18** (`origin` re-apuntado a `github-axio:AxiomaCloud/axio.git` vía deploy key SSH; `fetch` verifica que trae axio, no hub; working tree intacto). Reconciliar los 3 cambios locales + `pull` queda para Fase 6 | mfourgeaux |
-| H13 | Vulnerabilidades de dependencias sin escanear/remediar (`npm audit` hub: 47 backend / 18 frontend) — sin proceso de gestión de vulnerabilidades | apps (axioma) | CIS 7 | 🟡 | **pendiente** (higiene; sin proceso formal — ver gap G4) | martin4yo |
+| H13 | Vulnerabilidades de dependencias sin escanear/remediar (`npm audit` hub: 47 backend / 18 frontend) — sin proceso de gestión de vulnerabilidades | apps (axioma) | CIS 7 | 🟡 | ⏸ **remediado pero NO desplegado (2026-07-20)** — trabajo completo en checkout aislado: **61 → 11 vulnerabilidades, críticas 3 → 0**, sin `--force`; el `audit fix` rompió el build (tipado de axios) y se corrigió en 2 líneas, con **57/57 tests en PASS**. El despliegue exige commit en el repo de la app y una decisión sobre mitigar `pdfjs`. El **proceso periódico sigue ausente** — ver gap G4 | martin4yo |
 | H14 | `stub_status` de nginx no devolvió métricas al probar (colector `go.d/nginx` podría no recibir datos) | los 3 con nginx | CIS 13 | 🟢 | ✅ **verificado 2026-07-18** (falsa alarma: el colector apunta a `:8088`, no `:80`; el bloque stub_status existe en los 3 y el chart `nginx_local.connections` tiene datos vivos). Sin intervención en servers | mfourgeaux |
+
+### 7.1 Reapertura de H06 y corrección del criterio de verificación
+
+> Se documenta en detalle porque afecta la **confiabilidad de los cierres declarados** en este
+> registro, y porque la corrección del método es un control en sí mismo.
+
+**Qué pasó.** H06 se declaró cerrado el 2026-07-18. La verificación tenía dos defectos:
+
+1. **Cobertura parcial** — se validó en un solo server (dev-1) y se extrapoló al resto.
+2. **Criterio equivocado** — se comprobó que el **proceso ya en ejecución** seguía funcionando
+   después del `chmod`. Pero un proceso vivo ya tiene el `.env` leído en memoria: el permiso
+   restrictivo no lo afecta. Lo que un `chmod`/`chown` mal aplicado rompe es el **próximo
+   arranque**, que en ese momento no se probó.
+
+**Consecuencia.** Un cierre posterior derivado del mismo criterio provocó un **incidente en
+producción** (2026-07-20), con una caída de aproximadamente 1 minuto en la app afectada, resuelta
+por rollback inmediato.
+
+**Correcciones aplicadas al método** — hoy vigentes para todo cierre de hallazgo:
+
+- Verificar contra el **usuario configurado para el próximo arranque** (ecosystem/unit), no contra
+  el proceso vivo; y confirmar reinicio efectivo (`restart_time` estable).
+- Ejecutar la comprobación en los **5 servers**, sin extrapolar.
+- Usar **control negativo**: probar explícitamente que un usuario ajeno **no puede** leer el
+  secreto (p. ej. `hubapp` → NO_LEE), en vez de solo confirmar que el dueño sí puede.
+- Para cambios sobre HTTP, ampliar el criterio al **`Location` de las respuestas 3xx**: un
+  `curl → 200` no detecta que un redirect apunte a un host equivocado (así se detectó el fallo de
+  H04 en las apps Next.js).
+- Relevar **antes** de actuar: el relevamiento previo evitó una segunda caída al detectar
+  `/var/log/mini`, fuera de `/var/www`, sin el cual PM2 no arranca.
+
+**Hallazgos que la re-auditoría encontró y el cierre original no había visto:** 7 archivos `.env`
+en `664` world-readable en dev-1 (legibles por los 8 usuarios de apps del server), ~90 directorios
+en `777` en mini, y 2 configuraciones de owner divergentes en axioma. Todos cerrados salvo el
+`chown -R` de mini/axioma, que requiere ventana.
+
+**Efecto sobre este dossier.** Los cierres marcados ✅ con fecha **2026-07-19 o posterior** fueron
+verificados con el criterio corregido. Los anteriores se re-verificaron o se anotaron
+explícitamente cuando no fue posible.
 
 ---
 
@@ -239,9 +295,10 @@ notificaciones centralizadas.
 - [ ] **G1 — Política de seguridad formal.** No existe un documento de política (uso aceptable, clasificación de datos, requisitos de acceso, cifrado, retención). Hoy las prácticas están dispersas en docs técnicos (`hardening.md`, `estandar-despliegue.md`) pero no consolidadas en una política aprobada.
 - [ ] **G2 — Matriz de roles y responsabilidades (RACI).** Responsable técnico único (`mfourgeaux@axiomacloud.com`) para todos los dominios y todos los hallazgos → **riesgo de bus factor = 1** y sin segregación de funciones. No hay backup de responsable ni escalamiento definido.
 - [ ] **G3 — Gestión de riesgos.** No existe un registro de riesgos formal (identificación, probabilidad/impacto, tratamiento, aceptación). El DRP cubre escenarios de desastre pero no un análisis de riesgos del negocio.
-- [ ] **G4 — Gestión de vulnerabilidades y parches (CIS 7).** No hay proceso de escaneo periódico de vulnerabilidades ni política de parcheo (SO, PostgreSQL, Node, dependencias npm). Único dato: `npm audit` de hub pendiente (H13).
+- [ ] **G4 — Gestión de vulnerabilidades y parches (CIS 7).** No hay proceso de escaneo periódico de vulnerabilidades ni política de parcheo (SO, PostgreSQL, Node, dependencias npm). La remediación puntual de hub se ejecutó y validó el 2026-07-20 (61 → 11 vulnerabilidades, críticas 3 → 0, 57/57 tests en PASS) pero **aún no está desplegada**, y sigue siendo una acción reactiva y única: no hay escaneo calendarizado, umbrales de severidad para actuar, ni SLA de parcheo (H13).
 - [ ] **G5 — Plan de respuesta a incidentes formal (CIS 17).** El DRP incluye flujos de comunicación por escenario, pero no existe un IR plan independiente (detección, clasificación de severidad, contención, erradicación, recuperación, lecciones aprendidas, contactos, plantillas de post-mortem).
-- [ ] **G6 — Evidencia de revisión periódica.** El DRP declara "revisión trimestral obligatoria" (próxima 2026-08-29) pero no hay registro de revisiones ejecutadas. No hay cadencia documentada de auditoría de accesos ni de verificación mensual de acceso SSH de emergencia (el DRP §5.3 la pide, sin evidencia de ejecución).
+- [ ] **G6 — Evidencia de revisión periódica.** El DRP declara "revisión trimestral obligatoria" (próxima 2026-08-29) pero no hay registro de revisiones ejecutadas. No hay cadencia documentada de auditoría de accesos ni de verificación mensual de acceso SSH de emergencia (el DRP §5.3 la pide, sin evidencia de ejecución). **Avance parcial:** la cadencia de restore drills tiene ahora su primer ciclo completo con las 3 stanzas en PASS (2026-07-19), pero un ciclo no constituye cadencia sostenida.
+- [ ] **G10 — Criterio formal de verificación de remediaciones.** La reapertura de H06 (§7.1) mostró que no existía un estándar escrito de qué evidencia hace válido el cierre de un hallazgo. El criterio corregido (próximo arranque, cobertura total, control negativo, `Location` en 3xx) **está aplicado en la práctica pero aún no formalizado** como procedimiento aprobado con checklist de cierre.
 - [ ] **G7 — Gestión formal de secretos y rotación.** SOPS+age está implementado, pero no hay **política de rotación** de credenciales (el token R2 se rotó reactivamente por exposición, no por calendario) ni inventario formal de secretos con owner y frecuencia de rotación.
 - [ ] **G8 — Clasificación de datos y cumplimiento.** No hay clasificación de las bases (qué contiene datos personales/sensibles) ni evaluación de cumplimiento regulatorio aplicable.
 - [ ] **G9 — Continuidad de negocio (BCP) más allá del DRP técnico.** El DRP cubre recuperación técnica de DB/apps; no hay un BCP que cubra continuidad operativa, dependencias de terceros (Cloudflare R2, Netdata Cloud, proveedores VPS) ni acuerdos de nivel de servicio.
@@ -254,3 +311,4 @@ notificaciones centralizadas.
 |---|---|---|
 | 2026-07-18 | Compilación del dossier a partir de las fuentes del repo (solo lectura, sin tocar servers) | ✅ 14 hallazgos consolidados + 9 gaps de gobierno + mapeo CIS v8 de 11 controles |
 | 2026-07-18 | Revisión de deltas post-compilación (solo lectura de repo, sin tocar servers) | Sin cambios de estado en H01-H14 (el único commit posterior fue de memorias; los diffs de docs formalizan reglas, no aplican fixes a servers). Precisiones aplicadas: CIS 4/5 reflejan las **2 reglas de propiedad formalizadas en el estándar** (archivos `/var/www/<app>` todo `<app>app`; DB con `<app>user` owner de todos los objetos, no solo GRANT — aprendizaje del drill de hub); §6.3 enriquecida con la matriz de 4 escenarios + runbooks E/F + decisiones abiertas G3/G4/G8 del drill de app. **Drill DRP de app confirmado NO ejecutado** (sigue en relevamiento/pendiente de OK; no figura en `drill-history.csv`). §6.4 verificada exacta (fila 2026-05-29 viene de `restore-drill-procedure.md`; las 2 de 2026-07-04 del CSV auto-registrado). |
+| 2026-07-20 | **Actualización de estado al 2026-07-20** tras la pasada de remediación del 19–20 de julio (solo lectura de repo; fuente: `plan-remediacion-hallazgos.md` §registro de ejecución + `drill-history.csv` + log de commits) | Cambios de estado: **H03, H07, H08 → ✅ cerrados**; **H04 → parcial** (5 ítems en verde, 5 apps Next.js bloqueadas por el patrón `-H`/redirects); **H06 → ⚠ reabierto** (falso verde del 07-18 + incidente en prod) con 3 sub-ítems cerrados y el `chown -R` de mini/axioma pendiente de ventana; **H09 → ⏸ bloqueado** por dependencia de dattaweb; **H13 → ⏸ remediado sin desplegar**. Secciones tocadas: §1 (resumen + nota de transparencia + tabla de madurez), §5 (CIS 3, 4, 7, 11, 12, 13), §6.4 (6 corridas nuevas, incluidos los 4 FAIL diagnosticados), §7 (tabla de hallazgos + estado consolidado), **§7.1 nueva** (reapertura de H06 y criterio de verificación corregido), §8 (G4 actualizado, **G10 nuevo**). Sin intervención sobre servers. |

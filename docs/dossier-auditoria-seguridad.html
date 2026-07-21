@@ -273,10 +273,11 @@
     <h1 class="title">Seguridad y Continuidad — Infraestructura Axioma</h1>
     <p class="lede">Material estructurado para una auditoría externa formal de la postura de seguridad, monitoreo y recuperación ante desastres de una infraestructura de 5 servidores. Alineado a <strong>CIS Controls&nbsp;v8</strong>, con registro abierto de hallazgos y gaps de gobierno.</p>
     <div class="meta-row">
-      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b></span>
+      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-20</b></span>
       <span class="chip">Responsable técnico <b>mfourgeaux@axiomacloud.com</b></span>
       <span class="chip"><b>5</b> servidores</span>
-      <span class="chip"><b>14</b> hallazgos · <b>9</b> gaps</span>
+      <span class="chip"><b>14</b> hallazgos · <b>10</b> gaps</span>
+      <span class="chip"><b>8</b> cerrados · <b>2</b> parciales · <b>1</b> bloqueado · <b>3</b> pendientes</span>
       <span class="chip">Marco <b>CIS v8</b></span>
     </div>
   </div>
@@ -334,7 +335,7 @@
         </article>
         <article class="mat-card y">
           <div class="mat-top"><span class="mat-dom">DRP (recuperación)</span><span class="light y">Amarillo</span></div>
-          <p class="mat-body">DRP de DB formal (4 escenarios, RPO/RTO, checklist) + DRP de aplicación en definición (drill hub→axioma-drp). Drills ejecutados y registrados, pero <strong>cadencia mensual aún no sostenida</strong> (últimas corridas 2026-07-04).</p>
+          <p class="mat-body">DRP de DB formal (4 escenarios, RPO/RTO, checklist) + DRP de aplicación en definición (drill hub→axioma-drp). <strong>Las 3 stanzas productivas en PASS el 2026-07-19</strong>, con primera corrida registrada de AxiomaCloudProd y clubix. Queda como compromiso vivo <strong>sostener la cadencia mensual</strong>: un ciclo no constituye cadencia.</p>
         </article>
         <article class="mat-card g">
           <div class="mat-top"><span class="mat-dom">Gestión de secretos</span><span class="light g">Verde</span></div>
@@ -465,14 +466,14 @@
           <tbody>
             <tr><td><b>1</b> · Inventario de activos</td><td>Inventario cerrado de 5 servers + apps + bases por stanza</td><td class="mono">plan §2; DRP Apéndice A</td><td><span class="st ok">✓</span></td></tr>
             <tr><td><b>2</b> · Inventario de software</td><td>Apps por server + versión Node por app; PG/pgBackRest unificados</td><td class="mono">estandar §10; plan §2</td><td><span class="st part">manifiestos F7</span></td></tr>
-            <tr><td><b>3</b> · Protección de datos</td><td>pgBackRest repo2 R2 cifrado AES-256; SOPS+age para <code>.env</code>; TLS Let's Encrypt</td><td class="mono">pgbackrest-setup; plan §3</td><td><span class="st part">creds R2 · H03</span></td></tr>
-            <tr><td><b>4</b> · Configuración segura</td><td>SSH sin root/pass (5/5); ufw default-deny (5/5); <code>.env</code> 600; PG loopback; anti-scanner; <b>regla de propiedad de archivos</b> (<code>/var/www/&lt;app&gt;</code> todo <code>&lt;app&gt;app</code>)</td><td class="mono">hardening; estandar §3</td><td><span class="st part">H04 · H01</span></td></tr>
+            <tr><td><b>3</b> · Protección de datos</td><td>pgBackRest repo2 R2 cifrado AES-256; SOPS+age para <code>.env</code>; TLS Let's Encrypt</td><td class="mono">pgbackrest-setup; plan §3</td><td><span class="st part">residual en <code>.conf</code> · H03 cerrado</span></td></tr>
+            <tr><td><b>4</b> · Configuración segura</td><td>SSH sin root/pass (5/5); ufw default-deny (5/5); <code>.env</code> 600; PG loopback; anti-scanner; <b>regla de propiedad de archivos</b> (<code>/var/www/&lt;app&gt;</code> todo <code>&lt;app&gt;app</code>)</td><td class="mono">hardening; estandar §3</td><td><span class="st part">H01 · H04 parc. · H06 parc.</span></td></tr>
             <tr><td><b>5</b> · Gestión de cuentas</td><td>Usuario dedicado <code>&lt;app&gt;app</code> (no root); <code>linuxadmin</code> bloqueado en drp; <b>regla de propiedad en DB</b> (<code>&lt;app&gt;user</code> owner de todos los objetos)</td><td class="mono">estandar §2, §9</td><td><span class="st part">axio-ml · matriz</span></td></tr>
             <tr><td><b>6</b> · Gestión de accesos</td><td>SSH solo por pubkey (5/5); CA Smallstep en dev-1; pg_hba de axiodemo restringido a IP de dev-1</td><td class="mono">hardening §3; pgbackrest-setup</td><td><span class="st ok">✓ host</span></td></tr>
             <tr><td><b>8</b> · Logs de auditoría</td><td>fail2ban en los 5 (backend=systemd donde aplica); access.log nginx; anti-scanner filtra ruido; journald</td><td class="mono">hardening; nginx-anti-scanner</td><td><span class="st part">sin agregación central</span></td></tr>
-            <tr><td><b>11</b> · Recuperación de datos</td><td>DRP de DB (4 escenarios, RPO/RTO); restore drill con WAL replay auto-evaluante + CSV; <code>verify</code></td><td class="mono">disaster-recovery-plan; drill-history</td><td><span class="st part">cadencia · H07</span></td></tr>
-            <tr><td><b>12</b> · Infra de red</td><td>ufw default-deny allowlist SSH/80/443 (5/5); snmpd acotado a IPs dattaweb en dev-1</td><td class="mono">hardening §2 + comparativa</td><td><span class="st part">0.0.0.0 · H04</span></td></tr>
-            <tr><td><b>13</b> · Monitoreo y defensa</td><td>Netdata Cloud multicapa (5/5); alarmas custom apps_http + pgbackrest; Telegram/Email</td><td class="mono">README; setup-netdata-cloud</td><td><span class="st ok">✓ (H08 menor)</span></td></tr>
+            <tr><td><b>11</b> · Recuperación de datos</td><td>DRP de DB (4 escenarios, RPO/RTO); restore drill con WAL replay auto-evaluante + CSV; <code>verify</code></td><td class="mono">disaster-recovery-plan; drill-history</td><td><span class="st ok">✓ 3 stanzas PASS (H07)</span></td></tr>
+            <tr><td><b>12</b> · Infra de red</td><td>ufw default-deny allowlist SSH/80/443 (5/5); snmpd acotado a IPs dattaweb en dev-1</td><td class="mono">hardening §2 + comparativa</td><td><span class="st part">Next.js en 0.0.0.0 · H04 parc.</span></td></tr>
+            <tr><td><b>13</b> · Monitoreo y defensa</td><td>Netdata Cloud multicapa (5/5); alarmas custom apps_http + pgbackrest; Telegram/Email</td><td class="mono">README; setup-netdata-cloud</td><td><span class="st ok">✓ (H08 cerrado)</span></td></tr>
             <tr><td><b>7</b> · Gestión de vulnerabilidades</td><td>— (solo <code>npm audit</code> de hub registrado como pendiente)</td><td class="mono">plan-trabajo (hub: 47/18)</td><td><span class="st gap">gap · §8</span></td></tr>
             <tr><td><b>17</b> · Respuesta a incidentes</td><td>Flujo de comunicación por escenario en el DRP; sin plan de respuesta formal independiente</td><td class="mono">disaster-recovery-plan §3</td><td><span class="st gap">gap · §8</span></td></tr>
           </tbody>
@@ -524,6 +525,10 @@
             <tr><td class="num">2026-05-29</td><td>axiodemo</td><td>repo2</td><td class="num">14 s</td><td class="num">1 min</td><td><span class="st ok">PASS</span></td></tr>
             <tr><td class="num">2026-07-04</td><td>axiodemo</td><td>R2 (repo1 local)</td><td class="num">15 s</td><td class="num">0 min</td><td><span class="st ok">PASS</span></td></tr>
             <tr><td class="num">2026-07-04 ×2</td><td>axiodemo</td><td>R2</td><td class="num">13–15 s</td><td class="num">0 min</td><td><span class="st ok">PASS</span></td></tr>
+            <tr><td class="num">2026-07-19 12:26 / 12:51</td><td>AxiomaCloudProd · clubix</td><td>R2</td><td class="num">49–79 s</td><td class="num">—</td><td><span class="st gap">FAIL (bug del drill)</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td><b>AxiomaCloudProd</b></td><td>R2</td><td class="num">71 s</td><td class="num">0 min</td><td><span class="st ok">PASS · 1ª corrida</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td><b>clubix</b></td><td>R2</td><td class="num">44 s</td><td class="num">1 min</td><td><span class="st ok">PASS · 1ª corrida</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td>axiodemo</td><td>R2</td><td class="num">11 s</td><td class="num">1 min</td><td><span class="st ok">PASS</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -531,8 +536,8 @@
       <div class="find m" style="margin-top:14px">
         <div class="stripe"></div>
         <div class="fbody">
-          <div class="fhead"><span class="fid">H07</span><span class="ftitle">Observación de auditoría — cobertura de drills</span></div>
-          <p class="fdesc">Los drills registrados son <strong>solo de la stanza axiodemo</strong>; AxiomaCloudProd y clubix aún no tienen corrida registrada, y la cadencia mensual comprometida no está sostenida (última corrida 2026-07-04).</p>
+          <div class="fhead"><span class="fid">H07</span><span class="ftitle">Cobertura de drills — cerrado, con nota sobre los FAIL</span></div>
+          <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — AxiomaCloudProd y clubix tienen ahora su <strong>primera corrida registrada en PASS</strong>, junto a axiodemo. <b>Los 4 FAIL del mismo día quedan deliberadamente en el registro:</b> la causa fue un <strong>defecto del script de drill, no de los backups</strong> — el <code>pg_hba</code> del entorno de restore se copiaba del cluster local (con <code>scram</code>), provocando rechazo por autenticación, y la comprobación de conectividad no esperaba al WAL replay. Corregido y re-ejecutado a las 20:08 con las 3 stanzas en PASS. Los backups nunca estuvieron comprometidos; lo que falló fue el instrumento de verificación. <b>Compromiso vivo:</b> sostener la cadencia mensual.</p>
         </div>
       </div>
     </section>
@@ -557,13 +562,13 @@
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H03</span><span class="ftitle">Credenciales R2 en texto plano en <code>pgbackrest.conf</code></span></div>
         <div class="fmeta"><span class="tag cis">CIS 3</span><span class="tag">dev-1 · axioma · clubix · axiodemo · drp</span><span class="tag">Media</span></div>
-        <p class="fdesc"><span class="st ok">✓ token rotado 2026-07-17</span> — viejo borrado en Cloudflare, nuevo en 5 archivos, verificado con <code>pgbackrest check</code>; custodia SOPS. <strong>Pendiente menor</strong>: siguen en claro en los <code>.conf</code> que lee pgBackRest (protegidos por 640 + fw).</p>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — token rotado el 07-17 (viejo borrado en Cloudflare, nuevo en 5 archivos, verificado con <code>pgbackrest check</code>; custodia SOPS). El relevamiento del 07-19 mostró que los <code>.conf</code> vivos ya estaban en <code>640</code>+owner correcto y que la superficie real eran <strong>4 <code>.bak</code> con credenciales pre-rotación</strong>: respaldados en un tar <code>600</code> root-only y borrados los 4 (+2 residuos). Resultado: <b>0 <code>.bak</code> en los 5 servers</b>, <code>check</code> OK en las 4 stanzas, ningún <code>.conf</code> vivo tocado. <strong>Residual aceptado</strong>: las credenciales siguen en claro en los <code>.conf</code> que pgBackRest debe leer (limitación del producto), mitigado por <code>640</code> + owner + firewall.</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H04</span><span class="ftitle">Puertos de app en <code>0.0.0.0</code> en vez de <code>127.0.0.1</code></span></div>
-        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Salteando nginx/TLS/headers (axioma <code>:8087</code>, dev-1 <code>:3000/5000/8086/8087/8089</code>, CUPS <code>:631</code>, netdata <code>:19999</code>, axiodemo <code>:5300</code>). Defensa en profundidad; <strong>mitigado por ufw</strong>; rebindear a loopback en Fase 4/5.</p>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">parcial</span></div>
+        <p class="fdesc"><span class="st part">◐ parcial 2026-07-20</span> — el relevamiento confirmó que <strong>todos los <code>proxy_pass</code> ya apuntan a loopback</strong> (el riesgo principal no existía). <b>En verde:</b> <code>:8087</code> parse-front (axioma) → loopback; <strong>CUPS <code>:631</code> deshabilitado</strong> en dev-1 (nadie imprime); netdata <code>:19999</code> → <code>bind to = 127.0.0.1</code> en los 3, con ACLK intacto. <b>Bloqueadas 5 apps Next.js:</b> el flag <code>-H</code> bindea correctamente pero hace que Next redirija el login a <code>https://localhost:&lt;port&gt;</code> → revertido de inmediato en producción; <code>HOSTNAME</code> es inerte fuera de standalone. Sigue <strong>mitigado por ufw</strong>, que tapa esos puertos desde afuera.</p>
       </div></div>
 
       <div class="find h"><div class="stripe"></div><div class="fbody">
@@ -574,26 +579,26 @@
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H06</span><span class="ftitle"><code>.env</code> con permisos laxos (777/664/644/755) en vez de 600</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span></div>
-        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-18</span> — los <code>.env</code> de app en los 3 servers en 600 con owner alineado al proceso (dev-1: mediflow→<code>root</code>, checkpoint→<code>axiomacloud</code>), con backup. Migrar mediflow/checkpoint a usuario dedicado sigue en Fase 5.</p>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">los 5 servers</span><span class="tag">Media</span><span class="tag">REABIERTO</span></div>
+        <p class="fdesc"><span class="st gap">⚠ reabierto 2026-07-20</span> — el cierre del 07-18 fue un <strong>falso verde</strong>: se verificó un solo server y contra el proceso ya en ejecución, y un cierre derivado del mismo criterio provocó un <strong>incidente en producción</strong> (~1 min de caída, resuelto por rollback). Ver §7.1. <b>Cerrado tras la re-auditoría en los 5 servers:</b> <code>axio/.env</code> en dev-1 (7 archivos en <code>664</code> world-readable → <code>600 axioapp:axioapp</code>; los leían los 8 usuarios de apps del server, control negativo <code>hubapp</code> NO_LEE); <strong>mini/dev-1 migrada a <code>miniapp</code></strong> con ~90 directorios <code>777</code> → <code>750</code>/<code>755</code>, <code>find -not -user miniapp</code> vacío y health 200; mini/axioma backend <code>.env</code> → <code>600 miniapp:miniapp</code>. <b>Pendiente:</b> el <code>chown -R</code> del árbol de mini en axioma <strong>requiere ventana</strong> (server productivo).</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H07</span><span class="ftitle">Cadencia mensual de restore drills no sostenida</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 11</span><span class="tag">infra (backup)</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Solo stanza axiodemo con corridas registradas (AxiomaCloudProd/clubix sin drill registrado). Correr drill de las 3 stanzas prod y registrar; última corrida 2026-07-04.</p>
+        <div class="fmeta"><span class="tag cis">CIS 11</span><span class="tag">infra (backup)</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — las <strong>3 stanzas productivas en PASS</strong> (585 / 178 / 34 tablas restauradas, WAL al día); primera corrida registrada de AxiomaCloudProd y clubix. Los FAIL previos del mismo día se diagnosticaron como <strong>bug del drill, no de los backups</strong> (<code>pg_hba</code> con <code>scram</code> copiado del cluster local + chequeo que no esperaba el replay); <code>70-restore-drill.sh</code> corregido y re-ejecutado. <strong>Compromiso vivo</strong>: sostener la cadencia mensual — un ciclo no constituye cadencia.</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H08</span><span class="ftitle">Alarma de antigüedad de backup pgBackRest no desplegada</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 11 · 13</span><span class="tag">dev-1</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Config <code>netdata/health.d/pgbackrest.conf</code> + colector <code>netdata/pgbackrest/</code> listos en repo; falta desplegar con <code>scripts/30-…</code>.</p>
+        <div class="fmeta"><span class="tag cis">CIS 11 · 13</span><span class="tag">dev-1</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-18</span> — el hallazgo era <strong>incorrecto</strong>: el monitoreo ya estaba desplegado en dev-1 desde el <b>2026-05-26</b> (colector <code>pgbackrest-collect.py</code> + cron cada 15 min + <code>health.d</code> + <code>statsd.d</code>), con charts poblados y alarmas en CLEAR. Solo se reconcilió el colector del repo con la versión multi-repo del server (md5 idéntica); <strong>sin tocar dev-1</strong>.</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H09</span><span class="ftitle">snmpd con community <code>public</code> y <code>agentaddress</code> público</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">dev-1</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Mitigado: ufw permite 161 solo desde IPs dattaweb; falta <code>agentaddress 127.0.0.1</code> + cambiar community.</p>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">dev-1</span><span class="tag">Media</span><span class="tag">bloqueado</span></div>
+        <p class="fdesc"><span class="st part">⏸ bloqueado por tercero (2026-07-19)</span> — el relevamiento confirmó que la community <code>public</code> ya está acotada por <code>com2sec</code> a 2 IPs de dattaweb, y <code>tcpdump</code> probó que <strong>el proveedor consulta cada ~1 s y snmpd responde</strong>: bindear a loopback o cambiar la community <strong>cortaría el monitoreo contratado</strong>. Requiere coordinar la nueva community con dattaweb. Mitigado por ufw (161 solo desde esas IPs).</p>
       </div></div>
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
@@ -616,14 +621,38 @@
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H13</span><span class="ftitle">Vulnerabilidades de dependencias sin escanear/remediar</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 7</span><span class="tag">apps (axioma)</span><span class="tag">Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc"><code>npm audit</code> hub: 47 backend / 18 frontend — sin proceso formal de gestión de vulnerabilidades (ver gap G4).</p>
+        <div class="fmeta"><span class="tag cis">CIS 7</span><span class="tag">apps (axioma)</span><span class="tag">Media</span><span class="tag">remediado · sin desplegar</span></div>
+        <p class="fdesc"><span class="st part">⏸ remediado pero NO desplegado (2026-07-20)</span> — trabajo completo en checkout aislado: <strong>61 → 11 vulnerabilidades, críticas 3 → 0</strong>, sin <code>--force</code>; el <code>audit fix</code> rompió el build (tipado de axios) y se corrigió en 2 líneas, con <strong>57/57 tests en PASS</strong>. El despliegue exige commit en el repo de la app y una decisión sobre mitigar <code>pdfjs</code>. El <strong>proceso periódico sigue ausente</strong> — ver gap G4.</p>
       </div></div>
 
       <div class="find l"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H14</span><span class="ftitle"><code>stub_status</code> de nginx no devolvió métricas al probar</span></div>
         <div class="fmeta"><span class="tag cis">CIS 13</span><span class="tag">los 3 con nginx</span><span class="tag">Baja</span></div>
         <p class="fdesc"><span class="st ok">✓ verificado 2026-07-18</span> — falsa alarma: el colector apunta a <code>:8088</code> (no <code>:80</code>); el bloque stub_status existe en los 3 y el chart <code>nginx_local.connections</code> tiene datos vivos. Sin intervención en servers.</p>
+      </div></div>
+
+      <h3 style="margin-top:34px">7.1 · Reapertura de H06 y corrección del criterio de verificación</h3>
+      <p class="sub">Se documenta en detalle porque afecta la <strong>confiabilidad de los cierres declarados</strong> en este registro, y porque la corrección del método es un control en sí mismo.</p>
+
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Qué pasó</span><span class="ftitle">Un cierre declarado que no resistía verificación</span></div>
+        <p class="fdesc">H06 se declaró cerrado el 2026-07-18. La verificación tenía dos defectos: <b>(1) cobertura parcial</b> — se validó en un solo server (dev-1) y se extrapoló al resto; <b>(2) criterio equivocado</b> — se comprobó que el <strong>proceso ya en ejecución</strong> seguía funcionando tras el <code>chmod</code>, pero un proceso vivo ya tiene el <code>.env</code> leído en memoria: el permiso restrictivo no lo afecta. Lo que un <code>chmod</code>/<code>chown</code> mal aplicado rompe es el <strong>próximo arranque</strong>, que no se probó. <b>Consecuencia:</b> un cierre posterior derivado del mismo criterio provocó un <strong>incidente en producción</strong> (2026-07-20), con ~1 minuto de caída en la app afectada, resuelto por rollback inmediato.</p>
+      </div></div>
+
+      <div class="find l"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Método</span><span class="ftitle">Correcciones hoy vigentes para todo cierre de hallazgo</span></div>
+        <p class="fdesc">
+          • Verificar contra el <strong>usuario configurado para el próximo arranque</strong> (ecosystem/unit), no contra el proceso vivo; confirmar reinicio efectivo (<code>restart_time</code> estable).<br>
+          • Ejecutar la comprobación en los <strong>5 servers</strong>, sin extrapolar.<br>
+          • Usar <strong>control negativo</strong>: probar que un usuario ajeno <strong>no puede</strong> leer el secreto (p. ej. <code>hubapp</code> → NO_LEE), en vez de solo confirmar que el dueño sí puede.<br>
+          • Para cambios sobre HTTP, ampliar el criterio al <strong><code>Location</code> de las respuestas 3xx</strong>: un <code>curl → 200</code> no detecta que un redirect apunte a un host equivocado (así se detectó el fallo de H04 en las apps Next.js).<br>
+          • <strong>Relevar antes de actuar</strong>: el relevamiento previo evitó una segunda caída al detectar <code>/var/log/mini</code>, fuera de <code>/var/www</code>, sin el cual PM2 no arranca.
+        </p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Hallazgo</span><span class="ftitle">Lo que la re-auditoría encontró y el cierre original no vio</span></div>
+        <p class="fdesc">7 archivos <code>.env</code> en <code>664</code> world-readable en dev-1 (legibles por los 8 usuarios de apps del server), ~90 directorios en <code>777</code> en mini, y 2 configuraciones de owner divergentes en axioma. Todos cerrados salvo el <code>chown -R</code> de mini/axioma, que requiere ventana. <b>Efecto sobre este dossier:</b> los cierres marcados con fecha <strong>2026-07-19 o posterior</strong> fueron verificados con el criterio corregido; los anteriores se re-verificaron o se anotaron explícitamente cuando no fue posible.</p>
       </div></div>
     </section>
 
@@ -635,19 +664,20 @@
         <div class="gap"><span class="gid">G1</span><span class="gtxt"><span class="gtitle">Política de seguridad formal</span>No existe un documento de política (uso aceptable, clasificación de datos, requisitos de acceso, cifrado, retención). Las prácticas están dispersas en docs técnicos pero no consolidadas en una política aprobada.</span></div>
         <div class="gap"><span class="gid">G2</span><span class="gtxt"><span class="gtitle">Matriz de roles y responsabilidades (RACI)</span>Responsable técnico único para todos los dominios y hallazgos → <strong>riesgo de bus factor = 1</strong> y sin segregación de funciones. No hay backup de responsable ni escalamiento definido.</span></div>
         <div class="gap"><span class="gid">G3</span><span class="gtxt"><span class="gtitle">Gestión de riesgos</span>No existe registro de riesgos formal (identificación, probabilidad/impacto, tratamiento, aceptación). El DRP cubre escenarios de desastre pero no un análisis de riesgos del negocio.</span></div>
-        <div class="gap"><span class="gid">G4</span><span class="gtxt"><span class="gtitle">Gestión de vulnerabilidades y parches (CIS 7)</span>Sin proceso de escaneo periódico ni política de parcheo (SO, PostgreSQL, Node, dependencias npm). Único dato: <code>npm audit</code> de hub pendiente (H13).</span></div>
+        <div class="gap"><span class="gid">G4</span><span class="gtxt"><span class="gtitle">Gestión de vulnerabilidades y parches (CIS 7)</span>Sin proceso de escaneo periódico ni política de parcheo (SO, PostgreSQL, Node, dependencias npm). La remediación puntual de hub se ejecutó y validó el 2026-07-20 (61 → 11 vulnerabilidades, críticas 3 → 0, 57/57 tests en PASS) pero <strong>aún no está desplegada</strong>, y sigue siendo una acción reactiva y única: no hay escaneo calendarizado, umbrales de severidad para actuar, ni SLA de parcheo (H13).</span></div>
         <div class="gap"><span class="gid">G5</span><span class="gtxt"><span class="gtitle">Plan de respuesta a incidentes formal (CIS 17)</span>El DRP incluye flujos de comunicación por escenario, pero no un IR plan independiente (detección, clasificación, contención, erradicación, recuperación, lecciones aprendidas, contactos, post-mortem).</span></div>
         <div class="gap"><span class="gid">G6</span><span class="gtxt"><span class="gtitle">Evidencia de revisión periódica</span>El DRP declara revisión trimestral (próxima 2026-08-29) pero no hay registro de revisiones ejecutadas, ni cadencia documentada de auditoría de accesos o verificación mensual de SSH de emergencia.</span></div>
         <div class="gap"><span class="gid">G7</span><span class="gtxt"><span class="gtitle">Gestión formal de secretos y rotación</span>SOPS+age implementado, pero sin <strong>política de rotación</strong> (el token R2 se rotó reactivamente, no por calendario) ni inventario formal de secretos con owner y frecuencia.</span></div>
         <div class="gap"><span class="gid">G8</span><span class="gtxt"><span class="gtitle">Clasificación de datos y cumplimiento</span>No hay clasificación de las bases (qué contiene datos personales/sensibles) ni evaluación de cumplimiento regulatorio aplicable.</span></div>
         <div class="gap"><span class="gid">G9</span><span class="gtxt"><span class="gtitle">Continuidad de negocio (BCP) más allá del DRP técnico</span>El DRP cubre recuperación técnica de DB/apps; no hay un BCP que cubra continuidad operativa, dependencias de terceros (Cloudflare R2, Netdata Cloud, VPS) ni SLAs.</span></div>
+        <div class="gap"><span class="gid">G10</span><span class="gtxt"><span class="gtitle">Criterio formal de verificación de remediaciones</span>La reapertura de H06 (§7.1) mostró que no existía un estándar escrito de qué evidencia hace válido el cierre de un hallazgo. El criterio corregido (verificar contra el próximo arranque, cobertura en los 5 servers, control negativo, <code>Location</code> en respuestas 3xx) <strong>está aplicado en la práctica pero aún no formalizado</strong> como procedimiento aprobado con checklist de cierre.</span></div>
       </div>
     </section>
 
     <footer class="doc">
       <p class="fnote"><strong>Naturaleza del documento.</strong> Todo lo aquí afirmado se deriva de evidencia versionada en el repo <code>InfraMonitoreo</code> (y su repo hermano <code>infra-secrets</code>). Cuando un control esperado no existe como documento o implementación, se marca explícitamente como gap. Nada fue inventado.</p>
       <p class="fnote"><strong>Fuentes primarias.</strong> <span class="mono">hardening.md · disaster-recovery-plan.md · drp-app-hub-drill.md · restore-drill-procedure.md · pgbackrest-setup.md · setup-netdata-cloud.md · estandar-despliegue.md · plan-estandarizacion-y-redespliegue.md · plan-trabajo-estandarizacion.md · nginx-anti-scanner.md · netdata/ · scripts/ · drill-history.csv</span></p>
-      <p class="fnote">Compilación 2026-07-18 · remediación Ola 1 aplicada el mismo día: H06, H12 y H14 pasan a corregido/verificado (ver <code>plan-remediacion-hallazgos.md</code>) · Responsable técnico mfourgeaux@axiomacloud.com</p>
+      <p class="fnote">Compilación 2026-07-18 · <strong>estado actualizado al 2026-07-20</strong> tras la pasada de remediación del 19–20 de julio: H03, H07 y H08 pasan a cerrados; H04 a parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero; H13 remediado sin desplegar. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
     </footer>
 
   </main>
