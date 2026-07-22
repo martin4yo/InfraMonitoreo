@@ -75,7 +75,7 @@ Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-f
 
 | Server | App | `.env` | Modo | owner:grupo | Proceso corre como | Estado |
 |---|---|---|---|---|---|---|
-| axioma | **mini backend** | `/var/www/mini/backend/.env` | 640 | `axiomacloud:miniapp` | `miniapp` | ✅ funciona (lee por grupo); pendiente `chown miniapp:miniapp` + 600 por prolijidad |
+| axioma | **mini backend** | `/var/www/mini/backend/.env` | ~~640~~ **600** | ~~`axiomacloud:miniapp`~~ **`miniapp:miniapp`** | `miniapp` | ✅ **normalizado (2026-07-20)** — era `640 axiomacloud:miniapp` (leía por grupo) |
 | axioma | **mini frontend** | `/var/www/mini/frontend/.env` | 600 | `axiomacloud:axiomacloud` | (build) | ⚠️ **bomba latente** si se levanta como `miniapp` |
 | axioma | **mini print-agent** | `/var/www/mini/print-agent/.env` | 600 | `axiomacloud:axiomacloud` | (sin proceso) | ⚠️ **bomba latente** |
 | dev-1 | **checkpoint-web** | `/var/www/checkpoint-web/.env` | 600 | `axiomacloud:axiomacloud` | `axiomacloud` (viva) + `checkapp` (crash loop) | ⛔ ver sección 7 |
@@ -86,7 +86,7 @@ Eran 777 (mini print-agent/frontend), 664 (mini backend), 644 (mediflow, parse-f
 | axioma | hub, parse, elore, evolution-api | varios | 600 | `<app>app` | idem | ✅ |
 | clubix / axiodemo | clubix, axio | varios | 600 | `<app>app` | idem | ✅ |
 
-**Pendientes de este hallazgo:** ~~(1) `axio/.env` 664 → 600 en dev-1~~ ✅ **hecho (2026-07-20)** — resultaron **7 archivos** en `664`, no 2 (incluidos `.env.example` de 2588 y 2037 bytes, demasiado grandes para plantillas vacías) → todos a `600 axioapp:axioapp`, con respaldo en `/root/env-bak/` (`700` root-only). Control negativo verificado: `sudo -u hubapp test -r` → **NO_LEE** (antes, con `664`, lo leían los 8 usuarios de apps de dev-1). Sin riesgo de bomba: el owner **ya era** el usuario configurado. Quedan: (2) las 2 bombas latentes de mini en axioma; (3) `chown miniapp:miniapp` + 600 del backend de mini; (4) mediflow: sacar de root (dev-1) y normalizar grupo (axioma); (5) `ecosystem.config.js` de axio en dev-1 sigue en `664`.
+**Pendientes de este hallazgo:** ~~(1) `axio/.env` 664 → 600 en dev-1~~ ✅ **hecho (2026-07-20)** — resultaron **7 archivos** en `664`, no 2 (incluidos `.env.example` de 2588 y 2037 bytes, demasiado grandes para plantillas vacías) → todos a `600 axioapp:axioapp`, con respaldo en `/root/env-bak/` (`700` root-only). Control negativo verificado: `sudo -u hubapp test -r` → **NO_LEE** (antes, con `664`, lo leían los 8 usuarios de apps de dev-1). Sin riesgo de bomba: el owner **ya era** el usuario configurado. ~~(3) `chown miniapp:miniapp` + 600 del backend de mini~~ ✅ **hecho (2026-07-20)** — `600 miniapp:miniapp`, sin corte. Quedan: (2) las 2 bombas latentes de mini en axioma (se resuelven junto al `chown -R` del árbol — **~83k archivos**, requiere ventana); (4) mediflow: sacar de root (dev-1) y normalizar grupo (axioma); (5) `ecosystem.config.js` de axio en dev-1 sigue en `664`.
 
 ### 8. `axio-db-agent` — dónde vive realmente y su `.env` en `644` (2026-07-20)
 
@@ -209,8 +209,10 @@ en axiodemo de `50-cloud-init.conf`. Drop-in de hardening ordena `00-` para gana
 cargado (15+ apps Node/Next de 8 usuarios, nginx, Docker, CUPS). Cualquier app vulnerable corre en la misma
 caja que `/backup/pgbackrest`. Tenía brute-force SSH activo (185 baneos / 1459 fallos). **Bien**: pg_hba/listen
 acotados, y permisos pgBackRest correctos (`pgbackrest.conf` 640, `/backup/pgbackrest` 750, netdata sin acceso
-a los secretos). **Pendientes 🔴 tras el fix SSH**: 3 `.env` de mini en 777, firewall ausente, snmpd público
-(community `public`), apps Node crudas en IP pública. Ver "Pendientes dev-1" abajo.
+a los secretos). Los 🔴 iniciales tras el fix SSH (3 `.env` de mini en 777, firewall ausente) se cerraron el
+2026-07-17 (P1/P2 abajo). **Pendientes vigentes (mitigados por el fw)**: snmpd community `public` (H09,
+bloqueado por dattaweb), apps Node/Next en `0.0.0.0` (H04, patrón `-H`/redirects + 3 que requieren cambio de
+código). Ver "Pendientes dev-1" abajo.
 
 ### axioma-drp (170.78.75.249) — server bare, casi vacío
 Ubuntu 22.04, solo SSH escucha. Sin Postgres/nginx/apps/pgBackRest/Netdata. SSH ya homologado. **Hallazgo
