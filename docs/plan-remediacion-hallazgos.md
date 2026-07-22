@@ -715,11 +715,13 @@ de `reload` → corte innecesario. Mitigación: relevar orígenes reales (paso 1
 - [x] ⚠ `password_encryption=scram` + re-setear passwords de roles de app (re-hash) — 0 roles con hash md5
 - [x] ⚠ Aplicar pg_hba acotado + `pg_reload_conf()` (NO restart)
 - [x] Verificar: sin `0.0.0.0/0` activo + todas las apps conectan (hub/mediflow/mini/parse/evolution/netdata por loopback, 0 auth failures) + `password_encryption=scram`
-- [ ] Actualizar `hardening.md` (fila axioma #1 → verde)
+- [x] Actualizar `hardening.md` (fila axioma #1 → verde)
 
-> **Residual aceptado (2026-07-22):** las 2 reglas de `mediflow_db`/`mediflowuser` conservan el
-> **método** `md5` en pg_hba (una `local`, una `host 127.0.0.1/32`). No es riesgo: el hash del rol ya
-> es scram y el acceso está acotado a loopback; queda como prolijidad para una próxima pasada.
+> **Residual cerrado el mismo día (2026-07-22, 2ª pasada):** las 2 reglas de `mediflow_db`/`mediflowuser`
+> con método `md5` fueron migradas a `scram-sha-256` (backup previo + `pg_reload_conf()`), y se verificó
+> una **conexión nueva** de `mediflowuser` autenticando OK tanto directa (`:5432`) como vía pgbouncer
+> (`:6432` — mediflow conecta por pgbouncer, dato relevado en esta pasada). **0 líneas `md5` activas**
+> en el `pg_hba` de axioma. H01 queda cerrado sin residual.
 
 ---
 
@@ -930,7 +932,9 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-20 | (nuevo) | db-agent: rename `"Servidor Clubix"` → **`"Agente Axioma"`** (el agente corre en axioma, no en clubix) + **`clubix` fuera de `APPS`**. El restart sinceró que el agente **no podía servir clubix hace semanas** (`/var/www/clubix` no existe en axioma); `schema_tables` 416 → **254** (el 416 era un valor rancio en memoria desde el 27/06) | ✅ ambos aplicados — sin duplicar la fila (upsert por `agent_url`), `error_count=0`. **3 arranques con el `.env` en 600 ⇒ ausencia de bomba VERIFICADA** |
 | 2026-07-20 | H06 | **mini dev-1 migrada a `miniapp`** + normalizados los ~90 dirs en `777` → `750` (con `755` en las 3 rutas que nginx sirve). Incluyó `/var/log/mini`, **fuera de `/var/www`**, sin el cual PM2 no arranca. Detectado en el relevamiento, antes de ejecutar | ✅ verde — `find -not -user miniapp` vacío, health 200, **`restart_time`=0 estable a 70s**, checkpoint-web intacto, load 0.08. Caída de ~1 min por el gotcha del cwd |
 | 2026-07-20 | H06 | mini axioma: backend `.env` `640 axiomacloud:miniapp` → **`600 miniapp:miniapp`** (sin corte). Verificado que el deploy como `miniapp` es viable (deploy key propia, `ls-remote` rc=0) | 🟡 parcial — el `chown -R` del árbol de axioma **requiere ventana** (es productiva) |
-| 2026-07-22 | **H01** | `pg_hba` de axioma: backup `pg_hba.conf.bak-20260722-100113` → regla `0.0.0.0/0 md5` eliminada (queda comentada), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption=scram-sha-256` + re-hash de roles (**0 con hash md5**, incl. `mediflowuser`). Aplicado con `pg_reload_conf()`, sin restart | ✅ verde — apps conectando por loopback (hub/mediflow/mini/parse/evolution/netdata), 0 auth failures. **Residual aceptado:** 2 reglas de `mediflow_db` con método `md5` (hash ya scram, solo loopback) |
+| 2026-07-22 | **H01** | `pg_hba` de axioma: backup `pg_hba.conf.bak-20260722-100113` → regla `0.0.0.0/0 md5` eliminada (queda comentada), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption=scram-sha-256` + re-hash de roles (**0 con hash md5**, incl. `mediflowuser`). Aplicado con `pg_reload_conf()`, sin restart | ✅ verde — apps conectando por loopback (hub/mediflow/mini/parse/evolution/netdata), 0 auth failures. Residual inicial: 2 reglas de `mediflow_db` con método `md5` |
+| 2026-07-22 | H01 | 2ª pasada — residual de mediflow: las 2 reglas (`local` + `host 127.0.0.1/32`) `md5` → `scram-sha-256` con backup + `pg_reload_conf()`. Verificada **conexión nueva** de `mediflowuser`: directa `:5432` OK y vía **pgbouncer `:6432`** OK (mediflow conecta por pgbouncer — relevado acá) | ✅ **H01 cerrado sin residual** — 0 líneas `md5` activas en el pg_hba de axioma. ⚠ colateral anotado: password de `mediflowuser` corto/débil (8 chars) → candidato a rotación |
+| 2026-07-22 | — | **Reconciliación docs ↔ servers** (lectura en los 5): H04/H06/H09/H11/checkpoint-web/creds-AWS-hub verificados vigentes tal como están documentados; **logrotate dev-1 verificado** (rotó y comprimió las 00:00 del 21 y 22 — pendiente del 07-20 cerrado); netdata `:19999` en `0.0.0.0` también en **clubix y drp** (tapado por ufw; la comparativa de hardening decía "solo sshd" en drp) | ✅ foto real consolidada; desincronías documentales corregidas en `hardening.md` (tabla axioma #2/#4, fila drp) y tracker de estandarización (F4) |
 
 ---
 

@@ -15,7 +15,7 @@
 | 1 | Bajas (AxiomaWeb, rendiciones) | Bajo | [x] hecho (2026-07-05) |
 | 2 | Documento del estándar | Nulo | [x] hecho (2026-07-05) |
 | 3 | Secretos SOPS+age | Nulo (no toca servers) | [x] hecho (2026-07-05) |
-| 4 | Migración piloto (mini) | Medio | [ ] |
+| 4 | Migración piloto (pivotada a **hub**; mini descartada como piloto) | Medio | [~] ejecutada 2026-07-17 — hub online+systemd+TLS; queda 1 ítem de cierre (desfase código↔DB, tema aparte) |
 | 5 | Migración del resto | Medio | [ ] |
 | 6 | Hooks especiales + tercero | Medio | [ ] |
 | 7 | Construir redespliegue | Bajo (solo scripts) | [ ] |
@@ -224,7 +224,7 @@ parar PM2/servicio → quitar vhost → borrar cert si aplica → limpiar. Reduc
 #### Cierre — pendientes
 - [x] hub → **online + systemd enabled** (actualizar inventario §2)
 - [ ] **Desfase código↔DB:** el checkout (`32acd4c`) es más viejo que `hub_db` (PurchaseRequest 25 cols + FK `aprobadorId` que el código no conoce). No rompe (Prisma ignora extras) pero conviene **actualizar el código de hub** a una versión al día con la DB. NO se resuelve con `db push` (borraría columnas). Tema aparte.
-- [ ] Vulnerabilidades npm audit (47 backend / 18 frontend) — higiene, no bloqueante.
+- [x] Vulnerabilidades npm audit (47 backend / 18 frontend) — **superado por H13** (remediación 61→11, críticas 0, desplegada y verificada en prod 2026-07-20; ver `plan-remediacion-hallazgos.md`).
 
 #### Aprendizajes para el redeploy (Fases 7–8) — se completan al ejecutar
 - [x] **hub SÍ tiene remote** (`AxiomaCloud/ProHub`, SSH) → redesplegable. El relevamiento de Fase 0 dio "sin remote" por `safe.directory`: **el redeploy debe setear `safe.directory` o clonar como el owner correcto**, no asumir "sin remote" cuando `git` falla por owner.

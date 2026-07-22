@@ -9,10 +9,10 @@
 
 | # | Hallazgo | Sev | Estado |
 |---|---|---|---|
-| 1 | `pg_hba.conf`: `host all all 0.0.0.0/0 md5` (cualquier IP puede intentar conectar) | 🔴 | ✅ **corregido 2026-07-22**: loopback-only + scram, 0 roles md5 (residual: 2 reglas mediflow con método `md5`) |
-| 2 | Sin firewall (`ufw inactive`, iptables ACCEPT sin reglas) | 🔴 | pendiente |
+| 1 | `pg_hba.conf`: `host all all 0.0.0.0/0 md5` (cualquier IP puede intentar conectar) | 🔴 | ✅ **corregido 2026-07-22**: loopback-only + scram, 0 roles md5, **0 líneas `md5` activas** (residual mediflow cerrado el mismo día) |
+| 2 | Sin firewall (`ufw inactive`, iptables ACCEPT sin reglas) | 🔴 | ✅ **corregido 2026-07-17** (ufw default-deny + allowlist) |
 | 3 | SSH: `PermitRootLogin yes` (en `sshd_config.d/custom.conf`) + `PasswordAuthentication yes` | 🔴 | ✅ **corregido 2026-07-17** |
-| 4 | Puertos de app en `0.0.0.0` en vez de `127.0.0.1` (`:8087` parse-front) | 🟡 | pendiente |
+| 4 | Puertos de app en `0.0.0.0` en vez de `127.0.0.1` (`:8087` parse-front) | 🟡 | 🟡 parcial 2026-07-20 (`:8087` + netdata → loopback; quedan `:3700`/`:5300`/`:8080`/`:8089`, bloqueadas por patrón Next `-H` — H04) |
 | 5 | `.env` con permisos laxos (777/644/664) en vez de 600 | 🟡 | ✅ **corregido 2026-07-17** |
 | 6 | Credenciales R2 en texto plano en `pgbackrest.conf` (+ expuestas en sesión) | 🟡 | ✅ cerrado (2026-07-19): token rotado + `.bak` con creds purgados |
 
@@ -24,7 +24,7 @@
 ## Detalle y fix propuesto
 
 ### 1. pg_hba.conf `0.0.0.0/0` 🔴 → ✅ CORREGIDO (axioma, 2026-07-22)
-La regla `host all all 0.0.0.0/0 md5` permitía intentos de conexión desde cualquier IP; solo la salvaba que Postgres bindea a localhost. **Aplicado**: regla eliminada (queda comentada como evidencia), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption = scram-sha-256` + re-hash de todos los roles (**0 con hash md5**). Backup `pg_hba.conf.bak-20260722-100113` + `pg_reload_conf()` (sin restart). Verificado: apps conectando por loopback, 0 auth failures. **Residual aceptado**: 2 reglas de `mediflow_db` conservan el método `md5` (el hash del rol ya es scram y el acceso es loopback-only — prolijidad para una próxima pasada).
+La regla `host all all 0.0.0.0/0 md5` permitía intentos de conexión desde cualquier IP; solo la salvaba que Postgres bindea a localhost. **Aplicado**: regla eliminada (queda comentada como evidencia), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption = scram-sha-256` + re-hash de todos los roles (**0 con hash md5**). Backup `pg_hba.conf.bak-20260722-100113` + `pg_reload_conf()` (sin restart). Verificado: apps conectando por loopback, 0 auth failures. **Residual cerrado el mismo día (2ª pasada)**: las 2 reglas de `mediflow_db` con método `md5` → `scram-sha-256` (backup + `pg_reload_conf()`), verificada conexión nueva de `mediflowuser` directa (`:5432`) y vía **pgbouncer `:6432`** (mediflow conecta por pgbouncer). **0 líneas `md5` activas** en el pg_hba.
 
 ### 2. Firewall ausente 🔴 → ✅ CORREGIDO (axioma, 2026-07-17)
 Sin `ufw`/nftables, cualquier puerto que una app abra queda expuesto. Fix: `ufw` default-deny inbound, permitir sólo 22/2222 (SSH), 80, 443, y el 5408 (SSH alterno). **MUY delicado**: habilitar ufw sin permitir SSH primero = perder acceso al server. Orden estricto: `ufw allow <puertos-ssh>` ANTES de `ufw enable`, y con sesión SSH de respaldo abierta.
@@ -172,7 +172,7 @@ Detectado al investigar por qué el log de mini en axioma pesaba 130 MB. **Es un
 
 **Otros gotchas:** logrotate **ignora en silencio** cualquier config writable por grupo/otros → los archivos van `644 root:root`. Los globs `/home/*/...` **no sirven** acá: los dirs `.pm2` son `775` y logrotate exige `su`, que no puede declararse por usuario en un glob → configs específicas por server. Y **`create` no aplica con `copytruncate`** (trunca el existente, no crea uno nuevo): el `640` rige sobre los rotados, los activos necesitan `chmod` explícito.
 
-**Estado:** desplegado y verificado en los 5. dev-1 con rotación forzada (2,07 GB copiados en 59 s, apps en 200, `restart_time` sin cambios, fd verificado sano); axioma y el resto rotan naturalmente a las 00:00. **mini en axioma queda EXCLUIDO** (bloque comentado) hasta que se roten las credenciales del §9. Espacio recuperado: **0 hoy** por `delaycompress` — los ~2,2 GB de dev-1 se liberan en la corrida siguiente. **Verificar mañana** que la rotación de las 00:00 corrió y comprimió.
+**Estado:** desplegado y verificado en los 5. dev-1 con rotación forzada (2,07 GB copiados en 59 s, apps en 200, `restart_time` sin cambios, fd verificado sano); axioma y el resto rotan naturalmente a las 00:00. **mini en axioma queda EXCLUIDO** (bloque comentado) hasta que se roten las credenciales del §9. Espacio recuperado: **0 hoy** por `delaycompress` — los ~2,2 GB de dev-1 se liberan en la corrida siguiente. ✅ **Verificado 2026-07-22** (dev-1): la rotación corrió las 00:00 del 21 y del 22, con compresión aplicada (`pm2.log.2.gz`, `.3.gz` con los 46M viejos) y `logrotate.status` al día.
 
 ### 6. Credenciales R2 🟡 → ✅ TOKEN ROTADO (2026-07-17)
 `repo2-s3-key-secret` + `repo2-cipher-pass` en texto plano en `/etc/pgbackrest/pgbackrest.conf`; además se expusieron en una sesión el 2026-07-17. **Hecho**: rotado el API token R2 (viejo `a8790e48…` borrado en Cloudflare, nuevo `b47676fd…` aplicado en los **5 archivos** con backup), verificado con `pgbackrest check` en las 4 stanzas; `cipher-pass` conservado; credenciales cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). Ver `pgbackrest-setup.md`. **Cerrado (2026-07-19, H03 del plan de remediación).** Se evaluaron las 3 opciones (mantener+endurecer / archivo dedicado `600` vía `config-include-path` / variables `PGBACKREST_*`) y se eligió **mantener en el `.conf` + endurecer**: pgBackRest siempre necesita el secreto en claro en ejecución, así que mover a otro archivo owner-only es ganancia marginal frente a editar 5 configs productivas, y las env vars serían **peores** (legibles en `/proc/<pid>/environ`).
@@ -187,10 +187,10 @@ La superficie real no eran los `.conf` (ya en `640`, grupos de un solo miembro, 
 
 | # | Hallazgo | axioma | clubix | axiodemo | axioma-drp | dev-1 |
 |---|----------|--------|--------|----------|------------|-------|
-| 1 | pg_hba / listen | 🟢 ✅ **loopback + scram (fix 2026-07-22)**, bind localhost; residual: 2 reglas mediflow método `md5` | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
+| 1 | pg_hba / listen | 🟢 ✅ **loopback + scram (fix 2026-07-22)**, bind localhost, 0 líneas `md5` (residual mediflow cerrado el mismo día) | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
 | 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
 | 3 | SSH root/password | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` (homologado) | ✅ root+pass `no` (fix 2026-07-17) |
-| 4 | App en `0.0.0.0` | 🟡 `:8087` ✅ **loopback (2026-07-20)**; netdata ✅ loopback. Quedan `:3700` elore, `:8089` hub, `:8080` evolution-api, `:5300` mediflow | 🟡 19999, 25 | 🟡 `:5300` axio-back (needs código), `:8001` axio-ml **excepción aceptada** (dev-1 lo consume remoto); netdata ✅ loopback | 🟢 solo sshd | 🟡 **firewall tapa todo** (fix 2026-07-17). ✅ **CUPS `:631` deshabilitado + netdata loopback (2026-07-20)**. Quedan `:3000` elore, `:8087` parse, `:8089` hub (bloqueadas por patrón Next `-H`), `:8086`/`:5000` (needs código) |
+| 4 | App en `0.0.0.0` | 🟡 `:8087` ✅ **loopback (2026-07-20)**; netdata ✅ loopback. Quedan `:3700` elore, `:8089` hub, `:8080` evolution-api, `:5300` mediflow | 🟡 19999, 25 | 🟡 `:5300` axio-back (needs código), `:8001` axio-ml **excepción aceptada** (dev-1 lo consume remoto); netdata ✅ loopback | 🟡 sshd + netdata `:19999` en `0.0.0.0` (tapado por ufw — relevado 2026-07-22; netdata se instaló post-foto del 07-17) | 🟡 **firewall tapa todo** (fix 2026-07-17). ✅ **CUPS `:631` deshabilitado + netdata loopback (2026-07-20)**. Quedan `:3000` elore, `:8087` parse, `:8089` hub (bloqueadas por patrón Next `-H`), `:8086`/`:5000` (needs código) |
 | 5 | `.env` laxos | ✅ 600 | 🟢 600 | 🟡 `axio*/.env` 664 | ⬜ sin apps | 🟡 mini **777→600 ✅ (fix 2026-07-17)**; quedan varios 644/664/755 |
 | 6 | pgBackRest R2 claro | ✅ rotado + `.bak` purgados | ✅ | ✅ | ⬜ sin pgBackRest | ✅ rotado + `.bak` purgados (640 OK) |
 
