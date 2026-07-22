@@ -9,7 +9,7 @@
 
 | # | Hallazgo | Sev | Estado |
 |---|---|---|---|
-| 1 | `pg_hba.conf`: `host all all 0.0.0.0/0 md5` (cualquier IP puede intentar conectar) | 🔴 | pendiente |
+| 1 | `pg_hba.conf`: `host all all 0.0.0.0/0 md5` (cualquier IP puede intentar conectar) | 🔴 | ✅ **corregido 2026-07-22**: loopback-only + scram, 0 roles md5 (residual: 2 reglas mediflow con método `md5`) |
 | 2 | Sin firewall (`ufw inactive`, iptables ACCEPT sin reglas) | 🔴 | pendiente |
 | 3 | SSH: `PermitRootLogin yes` (en `sshd_config.d/custom.conf`) + `PasswordAuthentication yes` | 🔴 | ✅ **corregido 2026-07-17** |
 | 4 | Puertos de app en `0.0.0.0` en vez de `127.0.0.1` (`:8087` parse-front) | 🟡 | pendiente |
@@ -23,8 +23,8 @@
 
 ## Detalle y fix propuesto
 
-### 1. pg_hba.conf `0.0.0.0/0` 🔴
-La regla `host all all 0.0.0.0/0 md5` permite intentos de conexión desde cualquier IP. Hoy sólo lo salva que Postgres bindea a localhost. Fix: acotar a `127.0.0.1/32` (y la subred de backups si aplica), y migrar `md5` → `scram-sha-256`. **Invasivo** (mal hecho corta las apps): ventana + `pg_hba` de rollback + `SELECT pg_reload_conf()` (no restart).
+### 1. pg_hba.conf `0.0.0.0/0` 🔴 → ✅ CORREGIDO (axioma, 2026-07-22)
+La regla `host all all 0.0.0.0/0 md5` permitía intentos de conexión desde cualquier IP; solo la salvaba que Postgres bindea a localhost. **Aplicado**: regla eliminada (queda comentada como evidencia), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption = scram-sha-256` + re-hash de todos los roles (**0 con hash md5**). Backup `pg_hba.conf.bak-20260722-100113` + `pg_reload_conf()` (sin restart). Verificado: apps conectando por loopback, 0 auth failures. **Residual aceptado**: 2 reglas de `mediflow_db` conservan el método `md5` (el hash del rol ya es scram y el acceso es loopback-only — prolijidad para una próxima pasada).
 
 ### 2. Firewall ausente 🔴 → ✅ CORREGIDO (axioma, 2026-07-17)
 Sin `ufw`/nftables, cualquier puerto que una app abra queda expuesto. Fix: `ufw` default-deny inbound, permitir sólo 22/2222 (SSH), 80, 443, y el 5408 (SSH alterno). **MUY delicado**: habilitar ufw sin permitir SSH primero = perder acceso al server. Orden estricto: `ufw allow <puertos-ssh>` ANTES de `ufw enable`, y con sesión SSH de respaldo abierta.
@@ -187,7 +187,7 @@ La superficie real no eran los `.conf` (ya en `640`, grupos de un solo miembro, 
 
 | # | Hallazgo | axioma | clubix | axiodemo | axioma-drp | dev-1 |
 |---|----------|--------|--------|----------|------------|-------|
-| 1 | pg_hba / listen | 🔴 `0.0.0.0/0 md5`, salvado por bind localhost | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
+| 1 | pg_hba / listen | 🟢 ✅ **loopback + scram (fix 2026-07-22)**, bind localhost; residual: 2 reglas mediflow método `md5` | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
 | 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
 | 3 | SSH root/password | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` (homologado) | ✅ root+pass `no` (fix 2026-07-17) |
 | 4 | App en `0.0.0.0` | 🟡 `:8087` ✅ **loopback (2026-07-20)**; netdata ✅ loopback. Quedan `:3700` elore, `:8089` hub, `:8080` evolution-api, `:5300` mediflow | 🟡 19999, 25 | 🟡 `:5300` axio-back (needs código), `:8001` axio-ml **excepción aceptada** (dev-1 lo consume remoto); netdata ✅ loopback | 🟢 solo sshd | 🟡 **firewall tapa todo** (fix 2026-07-17). ✅ **CUPS `:631` deshabilitado + netdata loopback (2026-07-20)**. Quedan `:3000` elore, `:8087` parse, `:8089` hub (bloqueadas por patrón Next `-H`), `:8086`/`:5000` (needs código) |

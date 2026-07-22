@@ -273,11 +273,11 @@
     <h1 class="title">Seguridad y Continuidad — Infraestructura Axioma</h1>
     <p class="lede">Material estructurado para una auditoría externa formal de la postura de seguridad, monitoreo y recuperación ante desastres de una infraestructura de 5 servidores. Alineado a <strong>CIS Controls&nbsp;v8</strong>, con registro abierto de hallazgos y gaps de gobierno.</p>
     <div class="meta-row">
-      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-20</b></span>
+      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-22</b></span>
       <span class="chip">Responsable técnico <b>mfourgeaux@axiomacloud.com</b></span>
       <span class="chip"><b>5</b> servidores</span>
       <span class="chip"><b>14</b> hallazgos · <b>10</b> gaps</span>
-      <span class="chip"><b>9</b> cerrados · <b>2</b> parciales · <b>1</b> bloqueado · <b>2</b> pendientes</span>
+      <span class="chip"><b>10</b> cerrados · <b>2</b> parciales · <b>1</b> bloqueado · <b>1</b> pendiente</span>
       <span class="chip">Marco <b>CIS v8</b></span>
     </div>
   </div>
@@ -311,7 +311,7 @@
       <div class="exec">
         <span class="flag">Postura general</span>
         <p>La infraestructura Axioma (5 VPS en múltiples proveedores) tiene una <strong>postura de seguridad base sólida y verificada</strong> — los tres riesgos críticos de superficie de ataque (acceso SSH, firewall, credenciales de backup expuestas) fueron cerrados en los 5 servers el <strong>2026-07-17</strong> — y una <strong>capacidad de recuperación de datos probada</strong> mediante backups dual-repo cifrados off-site (pgBackRest → dev-1 SSH + Cloudflare R2) con restore drills que validan recuperación con WAL replay hasta minutos antes de un evento.</p>
-        <p>La brecha principal <strong>no es técnica sino de gobierno</strong>: no existen todavía documentos formales de política de seguridad, gestión de riesgos, gestión de vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos técnicos menores de defensa en profundidad (<code>pg_hba</code> amplio en un server, servicios en <code>0.0.0.0</code>, credenciales R2 en texto plano en los <code>.conf</code>). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con notificaciones centralizadas.</p>
+        <p>El <strong>2026-07-22</strong> se cerró el último hallazgo crítico de configuración: el <code>pg_hba</code> de axioma quedó acotado a loopback con <code>scram-sha-256</code> y 0 roles con hash md5 (H01). La brecha principal <strong>no es técnica sino de gobierno</strong>: no existen todavía documentos formales de política de seguridad, gestión de riesgos, gestión de vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos técnicos menores de defensa en profundidad (servicios en <code>0.0.0.0</code>, credenciales R2 en texto plano en los <code>.conf</code>). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con notificaciones centralizadas.</p>
       </div>
 
       <h3>Madurez por dominio</h3>
@@ -323,7 +323,7 @@
       <div class="grid-mat">
         <article class="mat-card y">
           <div class="mat-top"><span class="mat-dom">Seguridad / Hardening</span><span class="light y">Amarillo</span></div>
-          <p class="mat-body">Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado). Pendientes menores de defensa en profundidad (pg_hba <code>0.0.0.0/0</code> en axioma, apps en <code>0.0.0.0</code>, creds R2 en claro).</p>
+          <p class="mat-body">Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado). El último rojo de config cerró el 07-22: pg_hba de axioma acotado a loopback + scram (H01). Pendientes menores de defensa en profundidad (apps en <code>0.0.0.0</code>, creds R2 en claro).</p>
         </article>
         <article class="mat-card g">
           <div class="mat-top"><span class="mat-dom">Monitoreo</span><span class="light g">Verde</span></div>
@@ -467,7 +467,7 @@
             <tr><td><b>1</b> · Inventario de activos</td><td>Inventario cerrado de 5 servers + apps + bases por stanza</td><td class="mono">plan §2; DRP Apéndice A</td><td><span class="st ok">✓</span></td></tr>
             <tr><td><b>2</b> · Inventario de software</td><td>Apps por server + versión Node por app; PG/pgBackRest unificados</td><td class="mono">estandar §10; plan §2</td><td><span class="st part">manifiestos F7</span></td></tr>
             <tr><td><b>3</b> · Protección de datos</td><td>pgBackRest repo2 R2 cifrado AES-256; SOPS+age para <code>.env</code>; TLS Let's Encrypt</td><td class="mono">pgbackrest-setup; plan §3</td><td><span class="st part">residual en <code>.conf</code> · H03 cerrado</span></td></tr>
-            <tr><td><b>4</b> · Configuración segura</td><td>SSH sin root/pass (5/5); ufw default-deny (5/5); <code>.env</code> 600; PG loopback; anti-scanner; <b>regla de propiedad de archivos</b> (<code>/var/www/&lt;app&gt;</code> todo <code>&lt;app&gt;app</code>)</td><td class="mono">hardening; estandar §3</td><td><span class="st part">H01 · H04 parc. · H06 parc.</span></td></tr>
+            <tr><td><b>4</b> · Configuración segura</td><td>SSH sin root/pass (5/5); ufw default-deny (5/5); <code>.env</code> 600; PG loopback; <b>pg_hba de axioma acotado a loopback + scram</b> (H01 cerrado 07-22); anti-scanner; <b>regla de propiedad de archivos</b> (<code>/var/www/&lt;app&gt;</code> todo <code>&lt;app&gt;app</code>)</td><td class="mono">hardening; estandar §3</td><td><span class="st part">H04 parc. · H06 parc.</span></td></tr>
             <tr><td><b>5</b> · Gestión de cuentas</td><td>Usuario dedicado <code>&lt;app&gt;app</code> (no root); <code>linuxadmin</code> bloqueado en drp; <b>regla de propiedad en DB</b> (<code>&lt;app&gt;user</code> owner de todos los objetos)</td><td class="mono">estandar §2, §9</td><td><span class="st part">axio-ml · matriz</span></td></tr>
             <tr><td><b>6</b> · Gestión de accesos</td><td>SSH solo por pubkey (5/5); CA Smallstep en dev-1; pg_hba de axiodemo restringido a IP de dev-1</td><td class="mono">hardening §3; pgbackrest-setup</td><td><span class="st ok">✓ host</span></td></tr>
             <tr><td><b>8</b> · Logs de auditoría</td><td>fail2ban en los 5 (backend=systemd donde aplica); access.log nginx; anti-scanner filtra ruido; journald</td><td class="mono">hardening; nginx-anti-scanner</td><td><span class="st part">sin agregación central</span></td></tr>
@@ -549,8 +549,8 @@
 
       <div class="find h"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H01</span><span class="ftitle"><code>pg_hba.conf</code>: <code>host all all 0.0.0.0/0 md5</code></span></div>
-        <div class="fmeta"><span class="tag cis">CIS 3 · 4 · 6</span><span class="tag">axioma</span><span class="tag">Alta → Media</span><span class="tag">pendiente</span></div>
-        <p class="fdesc">Cualquier IP puede intentar conectar; md5 en vez de scram. <strong>Mitigado en la práctica</strong>: PG bindea a <code>127.0.0.1</code> + ufw bloquea 5432. Falta corregir a nivel config y migrar a scram-sha-256.</p>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4 · 6</span><span class="tag">axioma</span><span class="tag">Alta → Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-22</span> — la regla <code>0.0.0.0/0</code> fue eliminada (queda comentada como evidencia) y todas las reglas <code>host</code> quedaron acotadas a <code>127.0.0.1/32</code>/<code>::1/128</code> con <code>scram-sha-256</code>; <code>password_encryption = scram-sha-256</code> y <strong>0 roles con hash md5</strong> (todos re-hasheados). Aplicado con backup previo (<code>pg_hba.conf.bak-20260722-100113</code>) y <code>pg_reload_conf()</code>, sin restart. Verificado post-cambio: todas las apps de axioma conectando por loopback (hub, mediflow, mini, parse, evolution, netdata), 0 auth failures en el log de PG. <strong>Residual menor aceptado</strong>: 2 reglas de <code>mediflow_db</code> conservan el método <code>md5</code> en pg_hba (prolijidad pendiente, no riesgo — el hash del rol ya es scram y el acceso está acotado a loopback).</p>
       </div></div>
 
       <div class="find h"><div class="stripe"></div><div class="fbody">
@@ -677,7 +677,7 @@
     <footer class="doc">
       <p class="fnote"><strong>Naturaleza del documento.</strong> Todo lo aquí afirmado se deriva de evidencia versionada en el repo <code>InfraMonitoreo</code> (y su repo hermano <code>infra-secrets</code>). Cuando un control esperado no existe como documento o implementación, se marca explícitamente como gap. Nada fue inventado.</p>
       <p class="fnote"><strong>Fuentes primarias.</strong> <span class="mono">hardening.md · disaster-recovery-plan.md · drp-app-hub-drill.md · restore-drill-procedure.md · pgbackrest-setup.md · setup-netdata-cloud.md · estandar-despliegue.md · plan-estandarizacion-y-redespliegue.md · plan-trabajo-estandarizacion.md · nginx-anti-scanner.md · netdata/ · scripts/ · drill-history.csv</span></p>
-      <p class="fnote">Compilación 2026-07-18 · <strong>estado actualizado al 2026-07-22</strong> tras la pasada de remediación del 19–20 de julio: H03, H07, H08 y <strong>H13</strong> cerrados (H13 desplegado y verificado en producción el 07-20); H04 parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
+      <p class="fnote">Compilación 2026-07-18 · <strong>estado actualizado al 2026-07-22</strong> tras la pasada de remediación del 19–22 de julio: H03, H07, H08, <strong>H13</strong> (desplegado y verificado en producción el 07-20) y <strong>H01</strong> (pg_hba de axioma → loopback + scram, 07-22) cerrados; H04 parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
     </footer>
 
   </main>

@@ -50,8 +50,8 @@ invasivos: no se ejecutan sin aprobación puntual.
 | **3 — Hardening de servicios (config, recargable)** | H09 | snmpd community `public` + `agentaddress` público | dev-1 | 🟡 | Bajo-Medio | [!] bloqueado — coordinar con dattaweb |
 | 3 | H03 | Creds R2 en claro en los `.conf` | dev-1, axioma, clubix, axiodemo (+drp) | 🟡 | Medio | [x] (2026-07-19) |
 | **4 — Invasivos sobre apps/DB en prod (⚠ OK explícito)** | H04 | Apps escuchando en `0.0.0.0` → loopback | axioma, dev-1, axiodemo | 🟡 | Medio-Alto | [~] parcial (2026-07-20) — 5 en verde; Next.js bloqueadas por patrón `-H`/redirects |
-| 4 | H01 | `pg_hba` `0.0.0.0/0 md5` → rangos + scram | axioma | 🔴→🟡 | Alto | [ ] |
-| 4 | H13 | `npm audit` hub (47 back / 18 front) + higiene | apps (axioma) | 🟡 | Alto | [ ] |
+| 4 | H01 | `pg_hba` `0.0.0.0/0 md5` → rangos + scram | axioma | 🔴→🟡 | Alto | [x] (2026-07-22) |
+| 4 | H13 | `npm audit` hub (47 back / 18 front) + higiene | apps (axioma) | 🟡 | Alto | [x] (2026-07-20) — desplegado y verificado |
 | 4 | H11 | `axio-ml` corre como `axiomacloud` → usuario dedicado | axiodemo | 🟢 | Alto | [ ] |
 
 **Total: 10 hallazgos técnicos pendientes** en 4 olas de riesgo creciente.
@@ -710,12 +710,16 @@ de `reload` → corte innecesario. Mitigación: relevar orígenes reales (paso 1
 - `SHOW password_encryption;` → `scram-sha-256`; `SELECT count(*) FROM pg_authid WHERE rolpassword LIKE 'md5%';` → roles de app en 0 (o justificados).
 
 **Sub-pasos:**
-- [ ] Relevar pg_hba actual + orígenes reales (`pg_stat_activity`) + roles con hash md5 (lectura)
-- [ ] Backup `pg_hba.conf.bak-<ts>` + redactar el `pg_hba` nuevo acotado + scram
-- [ ] ⚠ `password_encryption=scram` + re-setear passwords de roles de app (re-hash) — **OK explícito**
-- [ ] ⚠ Aplicar pg_hba acotado + `pg_reload_conf()` (NO restart) — **OK explícito**
-- [ ] Verificar: sin `0.0.0.0/0`/`md5` + todas las apps conectan + `password_encryption=scram`
+- [x] Relevar pg_hba actual + orígenes reales (`pg_stat_activity`) + roles con hash md5 (lectura)
+- [x] Backup `pg_hba.conf.bak-20260722-100113` + redactar el `pg_hba` nuevo acotado + scram
+- [x] ⚠ `password_encryption=scram` + re-setear passwords de roles de app (re-hash) — 0 roles con hash md5
+- [x] ⚠ Aplicar pg_hba acotado + `pg_reload_conf()` (NO restart)
+- [x] Verificar: sin `0.0.0.0/0` activo + todas las apps conectan (hub/mediflow/mini/parse/evolution/netdata por loopback, 0 auth failures) + `password_encryption=scram`
 - [ ] Actualizar `hardening.md` (fila axioma #1 → verde)
+
+> **Residual aceptado (2026-07-22):** las 2 reglas de `mediflow_db`/`mediflowuser` conservan el
+> **método** `md5` en pg_hba (una `local`, una `host 127.0.0.1/32`). No es riesgo: el hash del rol ya
+> es scram y el acceso está acotado a loopback; queda como prolijidad para una próxima pasada.
 
 ---
 
@@ -926,6 +930,7 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 | 2026-07-20 | (nuevo) | db-agent: rename `"Servidor Clubix"` → **`"Agente Axioma"`** (el agente corre en axioma, no en clubix) + **`clubix` fuera de `APPS`**. El restart sinceró que el agente **no podía servir clubix hace semanas** (`/var/www/clubix` no existe en axioma); `schema_tables` 416 → **254** (el 416 era un valor rancio en memoria desde el 27/06) | ✅ ambos aplicados — sin duplicar la fila (upsert por `agent_url`), `error_count=0`. **3 arranques con el `.env` en 600 ⇒ ausencia de bomba VERIFICADA** |
 | 2026-07-20 | H06 | **mini dev-1 migrada a `miniapp`** + normalizados los ~90 dirs en `777` → `750` (con `755` en las 3 rutas que nginx sirve). Incluyó `/var/log/mini`, **fuera de `/var/www`**, sin el cual PM2 no arranca. Detectado en el relevamiento, antes de ejecutar | ✅ verde — `find -not -user miniapp` vacío, health 200, **`restart_time`=0 estable a 70s**, checkpoint-web intacto, load 0.08. Caída de ~1 min por el gotcha del cwd |
 | 2026-07-20 | H06 | mini axioma: backend `.env` `640 axiomacloud:miniapp` → **`600 miniapp:miniapp`** (sin corte). Verificado que el deploy como `miniapp` es viable (deploy key propia, `ls-remote` rc=0) | 🟡 parcial — el `chown -R` del árbol de axioma **requiere ventana** (es productiva) |
+| 2026-07-22 | **H01** | `pg_hba` de axioma: backup `pg_hba.conf.bak-20260722-100113` → regla `0.0.0.0/0 md5` eliminada (queda comentada), reglas `host` acotadas a `127.0.0.1/32`/`::1/128` con `scram-sha-256`; `password_encryption=scram-sha-256` + re-hash de roles (**0 con hash md5**, incl. `mediflowuser`). Aplicado con `pg_reload_conf()`, sin restart | ✅ verde — apps conectando por loopback (hub/mediflow/mini/parse/evolution/netdata), 0 auth failures. **Residual aceptado:** 2 reglas de `mediflow_db` con método `md5` (hash ya scram, solo loopback) |
 
 ---
 
