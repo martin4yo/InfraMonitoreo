@@ -13,7 +13,7 @@
 | 2 | Sin firewall (`ufw inactive`, iptables ACCEPT sin reglas) | 🔴 | ✅ **corregido 2026-07-17** (ufw default-deny + allowlist) |
 | 3 | SSH: `PermitRootLogin yes` (en `sshd_config.d/custom.conf`) + `PasswordAuthentication yes` | 🔴 | ✅ **corregido 2026-07-17** |
 | 4 | Puertos de app en `0.0.0.0` en vez de `127.0.0.1` (`:8087` parse-front) | 🟡 | 🟡 parcial 2026-07-20 (`:8087` + netdata → loopback; quedan `:3700`/`:5300`/`:8080`/`:8089`, bloqueadas por patrón Next `-H` — H04) |
-| 5 | `.env` con permisos laxos (777/644/664) en vez de 600 | 🟡 | ✅ **corregido 2026-07-17** |
+| 5 | `.env` con permisos laxos (777/644/664) en vez de 600 | 🟡 | ⚠️ **REABIERTO 2026-07-20** — el cierre del 07-17 era un falso verde (incidente en prod, ver §5); re-auditado en los 5, `.env` de mini/axioma backend ya en 600; pendiente el `chown -R` del árbol de mini (~83k archivos, requiere ventana — H06) |
 | 6 | Credenciales R2 en texto plano en `pgbackrest.conf` (+ expuestas en sesión) | 🟡 | ✅ cerrado (2026-07-19): token rotado + `.bak` con creds purgados |
 
 ## Bien (no tocar)

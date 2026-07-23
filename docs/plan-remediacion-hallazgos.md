@@ -6,7 +6,7 @@
 >
 > **Alcance de este plan:** los hallazgos técnicos **H01–H14 que siguen pendientes** (los ya ✅
 > corregidos —H02 firewall, H05 SSH, H10 linuxadmin, y la parte ya hecha de H03 token rotado / H06
-> axioma+mini— NO se re-trabajan). **FUERA de alcance:** los gaps de gobierno **G1–G9** del §8 del
+> axioma+mini— NO se re-trabajan). **FUERA de alcance:** los gaps de gobierno **G1–G10** del §8 del
 > dossier — son artefactos de documentación/proceso, no fixes técnicos sobre servers; se cubren en
 > un plan de gobierno aparte.
 >
@@ -54,9 +54,11 @@ invasivos: no se ejecutan sin aprobación puntual.
 | 4 | H13 | `npm audit` hub (47 back / 18 front) + higiene | apps (axioma) | 🟡 | Alto | [x] (2026-07-20) — desplegado y verificado |
 | 4 | H11 | `axio-ml` corre como `axiomacloud` → usuario dedicado | axiodemo | 🟢 | Alto | [ ] |
 
-**Total: 10 hallazgos técnicos pendientes** en 4 olas de riesgo creciente.
+**Total: 10 hallazgos técnicos abordados** en 4 olas de riesgo creciente. **Al 2026-07-22 restan 4:**
+H04 `[~]` parcial (patrón Next.js), H06 `[!]` reabierto (ventana para mini/axioma), H09 `[!]`
+bloqueado (dattaweb), H11 `[ ]` pendiente.
 
-> Los gaps de gobierno **G1–G9 quedan FUERA de este plan** (son documentación/proceso, no fixes
+> Los gaps de gobierno **G1–G10 quedan FUERA de este plan** (son documentación/proceso, no fixes
 > técnicos). Se abordan por separado.
 
 ---
@@ -117,7 +119,16 @@ Guardar copia previa del sitio tocado (`.bak-<ts>`) antes de editar.
 
 - **Server(s):** dev-1 (`.env` 644/664/755 varios), axiodemo (`axio*/.env` 664) · **Sev:** 🟡 · **Riesgo interv.:** Muy bajo · **CIS 3, 4**
 
-> axioma ya está en 600 ✅ y mini de dev-1 (777→600) ✅ (hardening.md). Falta el resto de dev-1 y axiodemo.
+> ⚠️ **REABIERTO 2026-07-20 — el "HECHO (2026-07-18)" de abajo era un falso verde.** La verificación
+> original validó solo dev-1 y contra el proceso *vivo* (que no revalida permisos), y un cierre
+> derivado del mismo criterio provocó un **incidente en producción** (mini/axioma 500 al reiniciar,
+> `.env` ilegible para `miniapp`). La sección de abajo se conserva como registro histórico; el estado
+> real está en el registro de ejecución (filas del 07-20) y en el dossier §7/§7.1. **Cerrado tras la
+> re-auditoría en los 5 servers:** `axio/.env` dev-1 → `600 axioapp`; mini/dev-1 migrada a `miniapp`;
+> mini/axioma backend `.env` → `600 miniapp:miniapp`. **Pendiente:** `chown -R` del árbol de mini en
+> axioma (**~83.000 archivos** con owner ≠ `miniapp`, relevado 07-22) — requiere ventana.
+
+> ~~axioma ya está en 600 ✅ y mini de dev-1 (777→600) ✅ (hardening.md). Falta el resto de dev-1 y axiodemo.~~ *(nota previa a la reapertura)*
 
 **Objetivo (verde).** Todo `.env` de app es `chmod 600` y **owner = el usuario que corre el proceso
 que lo lee** (típicamente `<app>app`, o `axiomacloud` donde la app aún no fue migrada). Cero `.env`
@@ -146,7 +157,7 @@ No hace falta reiniciar la app (el descriptor sigue abierto).
 - `sudo -n find /var/www /opt -maxdepth 3 -name '.env' -printf '%m %u:%g %p\n'` en dev-1 y axiodemo → **todos `600`** y owner == usuario del proceso.
 - Boot test de al menos una app tocada por server: reiniciar su servicio y confirmar que arranca y lee el `.env`.
 
-> **HECHO (2026-07-18).** Con backup `.bak-<ts>` de cada archivo. **axiodemo** (owner ya OK):
+> **HECHO (2026-07-18)** *(⚠ cierre luego invalidado — ver nota de reapertura arriba; se conserva como evidencia del criterio erróneo)*. Con backup `.bak-<ts>` de cada archivo. **axiodemo** (owner ya OK):
 > `axio/.env` 664→600, `axio-ml-service/.env` 664→600 (`axio/backend/.env` ya estaba 600).
 > **dev-1**: `elore/.env` 755→600 (owner OK); `mediflow/backend/.env` 644→600 con
 > `chown root:root` (el proceso corre como root vía PM2 de root); `checkpoint-web/.env` 644→600
@@ -940,7 +951,7 @@ restart. Revertir el `chown` si se hizo (volver a `axiomacloud`). El servicio vu
 
 ## Relación con otros documentos
 
-- **Fuente de los hallazgos:** [`dossier-auditoria-seguridad.md`](./dossier-auditoria-seguridad.md) §7 (H01–H14) y §8 (G1–G9, fuera de alcance).
+- **Fuente de los hallazgos:** [`dossier-auditoria-seguridad.md`](./dossier-auditoria-seguridad.md) §7 (H01–H14) y §8 (G1–G10, fuera de alcance).
 - **H01/H03/H04/H06/H09:** detalle técnico y estado por server en [`hardening.md`](./hardening.md).
 - **H07:** procedimiento y cadencia en [`restore-drill-procedure.md`](./restore-drill-procedure.md); traza en `drill-history.csv`.
 - **H08:** config de alarma en [`netdata/health.d/pgbackrest.conf`](../netdata/health.d/pgbackrest.conf) + `setup-netdata-cloud.md` §5.

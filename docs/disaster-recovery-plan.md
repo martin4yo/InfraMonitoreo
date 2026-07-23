@@ -4,7 +4,7 @@
 | Campo | Valor |
 |---|---|
 | Versión | 1.0 |
-| Fecha de última actualización | 2026-05-29 |
+| Fecha de última actualización | 2026-07-22 (§7.2/§7.3: registro de drills del 07-19; Apéndice A del 07-04) |
 | Próxima revisión obligatoria | 2026-08-29 (trimestral) |
 | Responsable técnico | martin4yo@gmail.com |
 | Repositorio | InfraMonitoreo — rama principal |
@@ -351,7 +351,7 @@ Este DRP debe revisarse en las siguientes circunstancias:
 
 **Frecuencia mínima:** 1 drill **mensual** de las 3 stanzas productivas (AxiomaCloudProd, clubix, axiodemo), más un drill fuera de cadencia después de cualquier cambio de config de pgBackRest, versión de PostgreSQL o migración de repo. El drill es barato (~1 min/stanza), así que la cadencia mensual da confianza sin costo operativo real.
 
-**Ejecución:** manual (no automatizada) mediante `scripts/70-restore-drill.sh`, corrido en un host **distinto de dev-1** (que aloja el repo) y con los prerequisitos de la sección 2 del Restore Drill Procedure. No se automatiza por cron porque el host ejecutor (KEYSOFT-UBUNTU) no está siempre encendido; el script es auto-evaluante (`exit 0/1`) y su registro es esta tabla.
+**Ejecución:** manual (no automatizada) mediante `scripts/70-restore-drill.sh`, corrido en un host **distinto de dev-1** (que aloja el repo) y con los prerequisitos de la sección 2 del Restore Drill Procedure. No se automatiza por cron porque el host ejecutor (KEYSOFT-UBUNTU) no está siempre encendido; el script es auto-evaluante (`exit 0/1`) y registra **cada corrida automáticamente en `drill-history.csv`**; la tabla de §7.3 es el resumen curado por evento.
 
 **Referencia:** Seguir el Restore Drill Procedure (§7 Cadencia, §8 Registro). El drill restaura desde R2 con WAL replay completo y valida frescura del WAL (umbral 30 min), no solo la recuperabilidad del último backup.
 
@@ -362,8 +362,12 @@ Este DRP debe revisarse en las siguientes circunstancias:
 | Fecha | Tipo | Stanza | Escenario | Repo usado | RTO real | Resultado | Responsable |
 |---|---|---|---|---|---|---|---|
 | 2026-07-04 | Drill | axiodemo | Restore + WAL replay desde R2 en host != repo | R2 | ~1 min | PASS (WAL lag 0 min, 34 tablas) | martin4yo |
+| 2026-07-19 | Drill | AxiomaCloudProd | Primera corrida de la stanza; restore desde R2 | R2 | ~71 s | FAIL ×2 (**falsos negativos** por 2 bugs del script de drill, corregidos — ver procedure §8) → **PASS** en la 3ª corrida (WAL lag 0 min, 585 tablas) | martin4yo |
+| 2026-07-19 | Drill | clubix | Primera corrida de la stanza; restore desde R2 | R2 | ~44 s | FAIL ×2 (**falsos negativos**, mismos bugs) → **PASS** en la 3ª corrida (WAL lag 1 min, 178 tablas) | martin4yo |
+| 2026-07-19 | Drill | axiodemo | Restore + WAL replay desde R2 | R2 | ~11 s | PASS en las 3 corridas (WAL lag 0–1 min) | martin4yo |
 
 > Completar esta tabla después de cada drill o incidente real. Incluir una fila por evento. Para incidentes reales, agregar también el post-mortem como documento separado referenciado desde aquí.
+> El **registro automático fila-por-corrida** es [`drill-history.csv`](./drill-history.csv) (lo escribe `scripts/70-restore-drill.sh`); esta tabla es el **resumen curado por evento** para el DRP. El detalle de los 2 FAIL diagnosticados del 07-19 está en `restore-drill-procedure.md` §8.
 
 ---
 

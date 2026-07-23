@@ -4,6 +4,12 @@ Corta los bots que escanean exploits de WordPress/PHP y, de paso, silencia la
 alarma de Netdata que disparaban. Se aplica con
 [`scripts/60-deploy-anti-scanner.sh`](../scripts/60-deploy-anti-scanner.sh).
 
+> **Estado de despliegue (2026-05-27):** aplicado en los 4 servers con nginx público —
+> **axioma, axiodemo y dev-1** (variante `map` de este doc) y **clubix** (variante `location`
+> equivalente, ver nota al final). **axioma-drp no aplica** (server bare, sin nginx instalado;
+> si el drill DRP de aplicación lo instala, correr el script ahí también). Al agregar un
+> vhost o server nuevo, re-correr el script (es idempotente).
+
 ## El problema
 
 Bots (sobre todo desde IPs de **Microsoft Azure**, con User-Agent vacío o

@@ -161,6 +161,11 @@
     font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.16em;
     color:var(--accent-soft);font-weight:640;margin-bottom:12px;display:block;
   }
+  .callout.warn{
+    background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--warn);
+    border-radius:12px;padding:16px 18px;margin:14px 0 8px;box-shadow:var(--shadow);
+  }
+  .callout.warn p{margin:0;font-size:14.5px}
 
   /* ---- maturity grid ---- */
   .grid-mat{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:14px;margin-top:22px}
@@ -273,7 +278,7 @@
     <h1 class="title">Seguridad y Continuidad — Infraestructura Axioma</h1>
     <p class="lede">Material estructurado para una auditoría externa formal de la postura de seguridad, monitoreo y recuperación ante desastres de una infraestructura de 5 servidores. Alineado a <strong>CIS Controls&nbsp;v8</strong>, con registro abierto de hallazgos y gaps de gobierno.</p>
     <div class="meta-row">
-      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-22</b></span>
+      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-23</b></span>
       <span class="chip">Responsable técnico <b>mfourgeaux@axiomacloud.com</b></span>
       <span class="chip"><b>5</b> servidores</span>
       <span class="chip"><b>14</b> hallazgos · <b>10</b> gaps</span>
@@ -311,7 +316,10 @@
       <div class="exec">
         <span class="flag">Postura general</span>
         <p>La infraestructura Axioma (5 VPS en múltiples proveedores) tiene una <strong>postura de seguridad base sólida y verificada</strong> — los tres riesgos críticos de superficie de ataque (acceso SSH, firewall, credenciales de backup expuestas) fueron cerrados en los 5 servers el <strong>2026-07-17</strong> — y una <strong>capacidad de recuperación de datos probada</strong> mediante backups dual-repo cifrados off-site (pgBackRest → dev-1 SSH + Cloudflare R2) con restore drills que validan recuperación con WAL replay hasta minutos antes de un evento.</p>
-        <p>El <strong>2026-07-22</strong> se cerró el último hallazgo crítico de configuración: el <code>pg_hba</code> de axioma quedó acotado a loopback con <code>scram-sha-256</code> y 0 roles con hash md5 (H01). La brecha principal <strong>no es técnica sino de gobierno</strong>: no existen todavía documentos formales de política de seguridad, gestión de riesgos, gestión de vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos técnicos menores de defensa en profundidad (servicios en <code>0.0.0.0</code>, credenciales R2 en texto plano en los <code>.conf</code>). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con notificaciones centralizadas.</p>
+        <p>En la pasada de remediación del 19–20 de julio se cerraron además la exposición de credenciales R2 en respaldos (H03), la cadencia de restore drills con las <strong>3 stanzas productivas en PASS</strong> (H07), parte del rebindeo de servicios a loopback (H04) y la remediación de dependencias vulnerables de hub <strong>desplegada a producción</strong> (H13: 61 → 11 vulnerabilidades, críticas 3 → 0, sin rollback). El <strong>2026-07-22</strong> se cerró el último hallazgo crítico de configuración: el <code>pg_hba</code> de axioma quedó acotado a loopback con <code>scram-sha-256</code> y 0 roles con hash md5 (H01). La brecha principal <strong>no es técnica sino de gobierno</strong>: no existen todavía documentos formales de política de seguridad, gestión de riesgos, gestión de vulnerabilidades ni plan de respuesta a incidentes, y quedan hallazgos técnicos de defensa en profundidad (apps Next.js aún en <code>0.0.0.0</code>, propiedad de archivos en una app productiva). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con notificaciones centralizadas.</p>
+        <div class="callout warn">
+          <p><strong>Nota de transparencia para el auditor.</strong> El hallazgo H06 (permisos de <code>.env</code>) fue declarado cerrado el 2026-07-18 y <strong>reabierto el 2026-07-20</strong>: la verificación original era insuficiente (se validó un solo server y contra el proceso ya en ejecución, en vez de contra el próximo arranque y en los 5 servers), y un cierre posterior derivado de ese criterio provocó un <strong>incidente en producción</strong>. El criterio de verificación fue corregido y la re-auditoría en los 5 servers detectó exposiciones que el cierre original no había visto (ver §7 y §7.1). Se deja registrado deliberadamente: la capacidad de detectar y revertir un falso verde es parte de la evidencia de control.</p>
+        </div>
       </div>
 
       <h3>Madurez por dominio</h3>
@@ -323,11 +331,11 @@
       <div class="grid-mat">
         <article class="mat-card y">
           <div class="mat-top"><span class="mat-dom">Seguridad / Hardening</span><span class="light y">Amarillo</span></div>
-          <p class="mat-body">Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado). El último rojo de config cerró el 07-22: pg_hba de axioma acotado a loopback + scram (H01). Pendientes menores de defensa en profundidad (apps en <code>0.0.0.0</code>, creds R2 en claro).</p>
+          <p class="mat-body">Críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado) y respaldos con credenciales purgados (H03, 07-19). El último rojo de config cerró el 07-22: pg_hba de axioma acotado a loopback + scram (H01). Pendientes de defensa en profundidad: 5 apps Next.js aún en <code>0.0.0.0</code> (H04, bloqueado por un patrón del framework), propiedad de archivos de mini/axioma (H06, requiere ventana).</p>
         </article>
         <article class="mat-card g">
           <div class="mat-top"><span class="mat-dom">Monitoreo</span><span class="light g">Verde</span></div>
-          <p class="mat-body">Netdata Cloud v2.10.4 claimed en los 5; colectores PG/nginx/httpcheck/apps + alarmas custom; notificaciones Telegram+Email. Gap menor: alarma de antigüedad de backup documentada pero no desplegada.</p>
+          <p class="mat-body">Netdata Cloud v2.10.4 claimed en los 5; colectores PG/nginx/httpcheck/apps + alarmas custom; notificaciones Telegram+Email. La alarma de antigüedad de backup pgBackRest se verificó <strong>desplegada y en CLEAR</strong> desde 2026-05-26 (H08 cerrado 07-18). Rotación de logs PM2 desplegada en los 5 (07-20).</p>
         </article>
         <article class="mat-card g">
           <div class="mat-top"><span class="mat-dom">Backup</span><span class="light g">Verde</span></div>
@@ -335,7 +343,7 @@
         </article>
         <article class="mat-card y">
           <div class="mat-top"><span class="mat-dom">DRP (recuperación)</span><span class="light y">Amarillo</span></div>
-          <p class="mat-body">DRP de DB formal (4 escenarios, RPO/RTO, checklist) + DRP de aplicación en definición (drill hub→axioma-drp). <strong>Las 3 stanzas productivas en PASS el 2026-07-19</strong>, con primera corrida registrada de AxiomaCloudProd y clubix. Queda como compromiso vivo <strong>sostener la cadencia mensual</strong>: un ciclo no constituye cadencia.</p>
+          <p class="mat-body">DRP de DB formal (4 escenarios, RPO/RTO, checklist) + DRP de aplicación en definición (drill hub→axioma-drp, aún no ejecutado). <strong>Las 3 stanzas productivas en PASS el 2026-07-19</strong>, con primera corrida registrada de AxiomaCloudProd y clubix. Queda como compromiso vivo <strong>sostener la cadencia mensual</strong> (un solo ciclo completo; próxima corrida esperada ~2026-08-19).</p>
         </article>
         <article class="mat-card g">
           <div class="mat-top"><span class="mat-dom">Gestión de secretos</span><span class="light g">Verde</span></div>
@@ -365,7 +373,7 @@
       </ul>
       <h3>No cubre (fuera de alcance / no documentado)</h3>
       <ul class="plain">
-        <li>Seguridad de las aplicaciones a nivel de código (SAST/DAST, revisión de código, dependencias — solo se registra <code>npm audit</code> pendiente en hub).</li>
+        <li>Seguridad de las aplicaciones a nivel de código (SAST/DAST, revisión de código, dependencias — solo se remedió <code>npm audit</code> en hub, H13; no hay proceso continuo para el resto de las apps).</li>
         <li>Seguridad física de los datacenters de los proveedores (Contabo, dattaweb, etc.).</li>
         <li>Gestión de identidades/usuarios de las aplicaciones (autenticación de usuarios finales).</li>
         <li>Continuidad de servicios que no son PostgreSQL ni apps Node (ej. Docker/CUPS en dev-1) más allá de su exposición de red.</li>
@@ -579,7 +587,7 @@
 
       <div class="find m"><div class="stripe"></div><div class="fbody">
         <div class="fhead"><span class="fid">H06</span><span class="ftitle"><code>.env</code> con permisos laxos (777/664/644/755) en vez de 600</span></div>
-        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">los 5 servers</span><span class="tag">Media</span><span class="tag">REABIERTO</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">REABIERTO</span></div>
         <p class="fdesc"><span class="st gap">⚠ reabierto 2026-07-20</span> — el cierre del 07-18 fue un <strong>falso verde</strong>: se verificó un solo server y contra el proceso ya en ejecución, y un cierre derivado del mismo criterio provocó un <strong>incidente en producción</strong> (~1 min de caída, resuelto por rollback). Ver §7.1. <b>Cerrado tras la re-auditoría en los 5 servers:</b> <code>axio/.env</code> en dev-1 (7 archivos en <code>664</code> world-readable → <code>600 axioapp:axioapp</code>; los leían los 8 usuarios de apps del server, control negativo <code>hubapp</code> NO_LEE); <strong>mini/dev-1 migrada a <code>miniapp</code></strong> con ~90 directorios <code>777</code> → <code>750</code>/<code>755</code>, <code>find -not -user miniapp</code> vacío y health 200; mini/axioma backend <code>.env</code> → <code>600 miniapp:miniapp</code>. <b>Pendiente:</b> el <code>chown -R</code> del árbol de mini en axioma <strong>requiere ventana</strong> (server productivo) — magnitud relevada el 07-22: <strong>~83.000 archivos</strong> con owner ≠ <code>miniapp</code>.</p>
       </div></div>
 
@@ -677,7 +685,7 @@
     <footer class="doc">
       <p class="fnote"><strong>Naturaleza del documento.</strong> Todo lo aquí afirmado se deriva de evidencia versionada en el repo <code>InfraMonitoreo</code> (y su repo hermano <code>infra-secrets</code>). Cuando un control esperado no existe como documento o implementación, se marca explícitamente como gap. Nada fue inventado.</p>
       <p class="fnote"><strong>Fuentes primarias.</strong> <span class="mono">hardening.md · disaster-recovery-plan.md · drp-app-hub-drill.md · restore-drill-procedure.md · pgbackrest-setup.md · setup-netdata-cloud.md · estandar-despliegue.md · plan-estandarizacion-y-redespliegue.md · plan-trabajo-estandarizacion.md · nginx-anti-scanner.md · netdata/ · scripts/ · drill-history.csv</span></p>
-      <p class="fnote">Compilación 2026-07-18 · <strong>estado actualizado al 2026-07-22</strong> tras la pasada de remediación del 19–22 de julio: H03, H07, H08, <strong>H13</strong> (desplegado y verificado en producción el 07-20) y <strong>H01</strong> (pg_hba de axioma → loopback + scram, 07-22, sin residual) cerrados; H04 parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
+      <p class="fnote">Compilación 2026-07-18 · <strong>estado verificado al 2026-07-23</strong> tras la pasada de remediación del 19–22 de julio y la revisión final pre-entrega: H03, H07, H08, <strong>H13</strong> (desplegado y verificado en producción el 07-20) y <strong>H01</strong> (pg_hba de axioma → loopback + scram, 07-22, sin residual) cerrados; H04 parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero; H11 pendiente. <strong>Consolidado: 10 cerrados · 2 parciales · 1 bloqueado · 1 pendiente · 10 gaps de gobierno (G1–G10)</strong>. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
     </footer>
 
   </main>
