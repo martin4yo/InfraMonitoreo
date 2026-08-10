@@ -183,6 +183,13 @@ La superficie real no eran los `.conf` (ya en `640`, grupos de un solo miembro, 
 
 ---
 
+> **📌 Nomenclatura: `alvera` = `mediflow`.** La app se llama **alvera**; `mediflow` es el nombre anterior,
+> **conservado a propósito** en la infraestructura (renombrar base, rol y systemd en producción tiene más
+> riesgo que beneficio). El rename llegó a los **dominios y vhosts** (`alvera.axiomacloud.com`,
+> `alvera.com.ar`) y a la config del `axio-db-agent` (`ALVERA_DATABASE_URL`), y **se detuvo ahí**: siguen
+> como `mediflow` el directorio `/var/www/mediflow`, el usuario `mediflowapp`, la unidad
+> `pm2-mediflowapp.service`, la app PM2 `mediflow-backend`, la base `mediflow_db` y el rol `mediflowuser`.
+
 ### 11. Relevamiento in-situ con acceso restaurado — 4 hallazgos nuevos (2026-08-09) 🔴
 
 Primer relevamiento **contra los servers** desde que se compiló el dossier. Los cuatro hallazgos tienen algo
@@ -218,7 +225,7 @@ datos que no quedó registrado en ningún lado.
 **11.4 🔴 El blocklist del `axio-db-agent` no protege los datos que debía proteger.**
 Verificado en el `.env` del server: `BLOCKED_TABLES = admins, admin_tokens, tenant_configuracion,
 configuracion, audit_log, sessions` y `BLOCKED_COLUMNS = password, token, tokenPortal, apiKey, secret,
-hash`. **Idéntico en las 5 configuraciones** (`MINI_`, `ALVERA_`=mediflow, `PARSE_`, `ELORE_` en axioma;
+hash`. **Idéntico en las 5 configuraciones** (`MINI_`, `ALVERA_` → `mediflow_db`, `PARSE_`, `ELORE_` en axioma;
 `CLUBIX_` en clubix): nunca se escribió un blocklist por aplicación. Protege **el sistema**, no a las
 personas — **ninguna tabla clínica figura en la lista**, y las historias clínicas quedan legibles hasta
 `MAX_ROWS=1000` por consulta. El agente conecta como **`mediflowuser`**, que por el estándar es **owner de

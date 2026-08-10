@@ -316,6 +316,15 @@ explícitamente cuando no fue posible.
 
 ---
 
+
+> **📌 Nomenclatura — alvera = mediflow.** La aplicación se llama **alvera**; `mediflow` es el nombre
+> anterior, conservado deliberadamente en la infraestructura. El rename llegó a los **dominios y vhosts**
+> (`alvera.axiomacloud.com`, `alvera.com.ar`) y a la config del `axio-db-agent` (`ALVERA_DATABASE_URL`),
+> pero **no** a `/var/www/mediflow`, al usuario `mediflowapp`, a `pm2-mediflowapp.service`, ni a la base
+> **`mediflow_db`** y el rol **`mediflowuser`**. Se documenta la equivalencia, no se propone renombrar:
+> tocar base, rol y unidad de systemd en una app productiva tiene más riesgo que beneficio. **Impacto a
+> tener presente:** en un restore, *"recuperá alvera"* obliga a traducir a `mediflow_db` bajo presión.
+
 ## 8. Gaps de gobierno (documentos que un auditor pediría; 8 de 10 redactados al 2026-08-06, pendientes de firma/aprobación)
 
 > Estos NO son fallas técnicas: son **artefactos de gobierno ausentes**. Se listan honestamente

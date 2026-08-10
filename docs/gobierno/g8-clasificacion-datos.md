@@ -64,11 +64,33 @@ Norma principal aplicable. Puntos que impactan directamente a esta infraestructu
 > Fuente del inventario: [DRP Apéndice A](../disaster-recovery-plan.md) (tomado 2026-07-04).
 > **La columna "Contenido" es inferida del dominio funcional de la app**, salvo donde se indica.
 
+> ### 📌 Nota de nomenclatura — **alvera = mediflow**
+>
+> La aplicación se llama **alvera**. `mediflow` es el **nombre anterior**, que sobrevive en la
+> infraestructura. **No es un error a corregir**: es una decisión tomada — renombrar base, rol, usuario de
+> SO y unidad de systemd en una app productiva tiene más riesgo que beneficio. Pero **hay que conocer la
+> equivalencia para leer este marco**, porque el rename se detuvo en la capa pública:
+>
+> | Se llama **alvera** en… | Sigue siendo **mediflow** en… |
+> |---|---|
+> | Dominios: `alvera.axiomacloud.com`, `api.alvera.axiomacloud.com`, `alvera.com.ar` | Filesystem: `/var/www/mediflow` |
+> | Vhosts nginx: `alvera`, `alvera.com.ar` | Usuario de SO: `mediflowapp` · systemd: `pm2-mediflowapp.service` · PM2: `mediflow-backend` |
+> | Config del `axio-db-agent`: `ALVERA_DATABASE_URL` | **Base: `mediflow_db`** · **Rol: `mediflowuser`** |
+>
+> **Por qué importa para este documento.** La base 🔴 Sensible se llama `mediflow_db`, pero la aplicación
+> que la usa se llama alvera: quien busque "la base de alvera" **no la encuentra por nombre**. Y en el
+> `axio-db-agent` la ambigüedad es máxima —`ALVERA_DATABASE_URL` apunta a `mediflow_db`—, que es
+> justamente el canal de acceso a datos de salud de [§5.2.2](#522--a8-verificada--el-blocklist-no-incluye-los-datos-que-debía-proteger).
+>
+> **Consecuencia operativa a tener presente:** en un restore o un incidente, alguien que reciba la orden
+> *"recuperá alvera"* tiene que saber que debe buscar `mediflow_db`, `/var/www/mediflow` y `mediflowapp`.
+> Bajo presión, esa traducción cuesta minutos que el [DRP](../disaster-recovery-plan.md) no presupuesta.
+
 ### 3.1 Stanza `AxiomaCloudProd` — servidor **axioma** (producción)
 
 | Base | Contenido (inferido) | Clasificación | Justificación |
 |---|---|---|---|
-| `mediflow_db` | Gestión médica — pacientes, prestaciones | 🔴 **Sensible** **(a confirmar)** | Datos de salud → art. 7. **Máxima prioridad de validación** |
+| `mediflow_db` **(app: alvera)** | Gestión médica — pacientes, prestaciones | 🔴 **Sensible** **(a confirmar)** | Datos de salud → art. 7. **Máxima prioridad de validación.** Ver nota de nomenclatura arriba: la app se llama **alvera**, la base conserva el nombre anterior |
 | `mini_db` | App de gestión con facturación | 🟠 Confidencial | PII de clientes + datos de transacciones. ⚠ **Corregido 2026-08-09:** decía "y pagos (MercadoPago)". La integración de pago existe en el código pero **no está configurada** — `mercadopago_config` está **vacía** y `mini-backend.env` no tiene credenciales de la pasarela ([hardening §9](../hardening.md), [G7 §3.2](./g7-rotacion-secretos.md)). Quien procesa pagos es **clubix** |
 | `chequescloud` | Gestión de cheques | 🟠 Confidencial | Datos financieros e identificatorios |
 | `core_db` | Núcleo transversal — usuarios/cuentas | 🟠 Confidencial **(a confirmar)** | Probable PII de usuarios del ecosistema |
