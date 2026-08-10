@@ -183,13 +183,56 @@ La superficie real no eran los `.conf` (ya en `640`, grupos de un solo miembro, 
 
 ---
 
+### 11. Relevamiento in-situ con acceso restaurado — 4 hallazgos nuevos (2026-08-09) 🔴
+
+Primer relevamiento **contra los servers** desde que se compiló el dossier. Los cuatro hallazgos tienen algo
+en común: **ninguno era deducible leyendo el repo**, y tres contradicen algo que este documento afirmaba.
+
+**11.1 🔴 Llaves del proveedor de hosting en la cuenta de operación de dev-1.**
+`/home/axiomacloud/.ssh/authorized_keys` de dev-1 tiene **53 entradas, 48 de ellas `@donweb.com`** — y
+`axiomacloud` tiene **`sudo` sin contraseña**. Sin `from=` ni `command=`. En `/root/.ssh/authorized_keys`
+hay además ~43 llaves de donweb en **axioma (46), clubix (43) y dev-1 (43)**; **axiodemo tiene 0**, lo que
+prueba que un server puede operar sin ellas. Las de `root` están **inertes** por `PermitRootLogin no` — el
+fix del 2026-07-17 les cortó el acceso sin que quedara registrado ese efecto colateral. Las de dev-1 **no**.
+**Uso confirmado en `auth.log`:** `santiago.fernandez@donweb.com` autenticó como root el **2026-07-14 a las
+11:29 y 12:32** desde `200.58.112.191`, y `lastlog` marca otro acceso el **2026-06-11 02:39**. Sin evidencia
+de exploración interactiva (el `bash_history` de root, continuo de enero a agosto, no tiene comandos el
+13–15 de julio), pero eso **no descarta** acceso a datos: `ssh host <cmd>` y `scp` no dejan rastro ahí.
+→ **R20** en G3 · [G8 §4.2](./gobierno/g8-clasificacion-datos.md).
+
+**11.2 🔴 Cambio de `sshd` escrito y nunca aplicado — habilitación latente de password auth.**
+El 2026-08-09 20:54 se creó `/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf` en los **4 servers**
+con `Match User axiomacloud` + `PasswordAuthentication yes`. **Nunca tomó efecto**: `sshd` no se recargó
+(activo desde jul-14 / jul-16 / jul-17 / ago-01) y `sshd -T` sigue devolviendo `passwordauthentication no`.
+El archivo **sigue en disco**: el próximo `reload`, actualización de OpenSSH o reboot lo activa en silencio,
+con una contraseña ya expuesta. **Un cambio que no se aplicó es más peligroso que uno que sí, porque nadie
+lo está mirando.** *Fix:* borrar el archivo, no confiar en no recargar. → **R18**.
+
+**11.3 ⚠️ Existe un segundo `axio-db-agent`, en clubix.**
+El §8 de este documento afirma: *"hay **un solo agente**, en **axioma**… En clubix y axiodemo **no existe**
+el agente."* Es falso desde el **2026-07-24**: clubix tiene `/opt/axio-db-agent` **`enabled` y `active`**,
+con `SERVER_NAME="Servidor Clubix"` y acceso a `clubix_db`. Se desplegó **un día después de entregar el
+dossier al auditor** — no es un error del relevamiento, es **deriva post-entrega** de un canal de acceso a
+datos que no quedó registrado en ningún lado.
+
+**11.4 🔴 El blocklist del `axio-db-agent` no protege los datos que debía proteger.**
+Verificado en el `.env` del server: `BLOCKED_TABLES = admins, admin_tokens, tenant_configuracion,
+configuracion, audit_log, sessions` y `BLOCKED_COLUMNS = password, token, tokenPortal, apiKey, secret,
+hash`. **Idéntico en las 5 configuraciones** (`MINI_`, `ALVERA_`=mediflow, `PARSE_`, `ELORE_` en axioma;
+`CLUBIX_` en clubix): nunca se escribió un blocklist por aplicación. Protege **el sistema**, no a las
+personas — **ninguna tabla clínica figura en la lista**, y las historias clínicas quedan legibles hasta
+`MAX_ROWS=1000` por consulta. El agente conecta como **`mediflowuser`**, que por el estándar es **owner de
+la base y de todos sus objetos**, y es el rol de la contraseña débil de 8 caracteres (R06).
+→ **R14** · [G8 §5.2.2](./gobierno/g8-clasificacion-datos.md).
+
 ## Comparativa 5 servers (2026-07-17)
 
 | # | Hallazgo | axioma | clubix | axiodemo | axioma-drp | dev-1 |
 |---|----------|--------|--------|----------|------------|-------|
 | 1 | pg_hba / listen | 🟢 ✅ **loopback + scram (fix 2026-07-22)**, bind localhost, 0 líneas `md5` (residual mediflow cerrado el mismo día) | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
 | 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
-| 3 | SSH root/password | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` | ✅ root+pass `no` (homologado) | ✅ root+pass `no` (fix 2026-07-17) |
+| 3 | SSH root/password | 🟡 `sshd -T` OK, pero con `99-temp-password…conf` latente (§11.2) | 🟡 ídem | 🟡 ídem | ✅ root+pass `no` (homologado) | 🟡 ídem (fix 2026-07-17) |
+| 3b | **Llaves en `authorized_keys`** *(nuevo 2026-08-09, §11.1)* | 🟡 root **46** (43 donweb, inertes) · axiomacloud 6 | 🟡 root **43** (44 donweb, inertes) · axiomacloud 8 | 🟢 root **0** · axiomacloud 5 | ⬜ no relevado (22 filtrado) | 🔴 **axiomacloud 53, 48 de donweb, con sudo sin password** · root 43 |
 | 4 | App en `0.0.0.0` | 🟡 `:8087` ✅ **loopback (2026-07-20)**; netdata ✅ loopback. Quedan `:3700` elore, `:8089` hub, `:8080` evolution-api, `:5300` mediflow | 🟡 19999, 25 | 🟡 `:5300` axio-back (needs código), `:8001` axio-ml **excepción aceptada** (dev-1 lo consume remoto); netdata ✅ loopback | 🟡 sshd + netdata `:19999` en `0.0.0.0` (tapado por ufw — relevado 2026-07-22; netdata se instaló post-foto del 07-17) | 🟡 **firewall tapa todo** (fix 2026-07-17). ✅ **CUPS `:631` deshabilitado + netdata loopback (2026-07-20)**. Quedan `:3000` elore, `:8087` parse, `:8089` hub (bloqueadas por patrón Next `-H`), `:8086`/`:5000` (needs código) |
 | 5 | `.env` laxos | ✅ 600 | 🟢 600 | 🟡 `axio*/.env` 664 | ⬜ sin apps | 🟡 mini **777→600 ✅ (fix 2026-07-17)**; quedan varios 644/664/755 |
 | 6 | pgBackRest R2 claro | ✅ rotado + `.bak` purgados | ✅ | ✅ | ⬜ sin pgBackRest | ✅ rotado + `.bak` purgados (640 OK) |

@@ -43,6 +43,14 @@
 | **R10** | Ausencia de plan formal de respuesta a incidentes | G5 | B | A | 🟡 Medio | Mitigar | El DRP cubre flujos de comunicación por escenario, pero falta un IR plan independiente (detección, severidad, contención, post-mortem). Formalizar en [G5](./g5-respuesta-incidentes.md) | RT | — |
 | **R11** | Cadencia mensual de restore drills aún no sostenida (un solo ciclo completo) | H07 / G6 | M | M | 🟡 Medio | Mitigar | 3 stanzas en PASS el 2026-07-19 (1er ciclo). Sostener la cadencia y registrar en `drill-history.csv`; próxima ~2026-08-19 ([G6](./g6-revisiones-periodicas.md)) | RT | — |
 | **R12** | Dependencia de terceros sin SLA formal (Cloudflare R2, VPS, Netdata Cloud, dattaweb) | G9 | B | A | 🟡 Medio | Aceptar | Sin acuerdos de nivel de servicio formalizados. Cubrir en el [BCP — G9](./g9-continuidad-negocio.md); aceptado hasta entonces | RT | AN |
+| **R13** | **dev-1 (entorno de desarrollo) podría alojar datos productivos reales**, incluidos datos de salud 🔴 | [G8 §3.4](./g8-clasificacion-datos.md) | **A** | **A** | 🔴 **Alto** | Mitigar | dev-1 tiene **16 bases homónimas de las productivas** (`mediflow_db`, `mini_db`, `clubix_db`, `checkpoint_db`, `hub_db`, `core_db`…). Si contienen datos reales, un entorno de desarrollo trata datos del art. 7 de la Ley 25.326 bajo controles de desarrollo. **P alta** porque el patrón habitual de refresco de entornos es restaurar un dump de producción. *Acción A2 de G8:* confirmar el contenido y, según resultado, anonimizar, restringir o elevar los controles de dev-1 a nivel producción | RT | AN |
+| **R14** | 🔴 **`axio-db-agent`: el blocklist que debía proteger los datos no los incluye** — acceso a 4 bases productivas, incluida `mediflow_db` (🔴), conectando como **owner** de cada base | [G8 §5.2.1](./g8-clasificacion-datos.md) · A8 verificada 2026-08-09 | **A** | **A** | 🔴 **Alto** | Mitigar | **Verificado en el server (A8).** El agente de axioma conecta a `mini_db`, `mediflow_db`, `parse_db` y `elore_db`, y el de **clubix** (que `hardening.md` afirmaba inexistente, activo desde 2026-07-24) a `clubix_db`. El control declarado es un blocklist en variable de entorno, y su contenido es **idéntico en las 5 configuraciones**: tablas `admins, admin_tokens, tenant_configuracion, configuracion, audit_log, sessions` y columnas `password, token, tokenPortal, apiKey, secret, hash`. **No hay una sola tabla de negocio ni clínica en la lista**: protege *el sistema* (credenciales, config, auditoría), no *a los pacientes*. Las historias clínicas quedan legibles hasta `MAX_ROWS=1000` por consulta. Agravante: conecta con el rol **`mediflowuser`**, que por el estándar es **owner de la base y de todos sus objetos** → a nivel PostgreSQL tiene acceso total, y es el rol de la **contraseña débil de 8 caracteres** (R06). *Mitigación de fondo:* rol de PostgreSQL **de solo lectura con privilegios a nivel de columna**, para que el control lo haga el motor y quede auditable | RT | AN |
+| **R15** | **Claves de cifrado de datos en reposo sin respaldo verificado** — perderlas haría ilegibles los datos restaurados desde backup | [G7 §4.3](./g7-rotacion-secretos.md) | B | **A** | 🟡 Medio | Mitigar | `ENCRYPTION_MASTER_KEY` + `SEARCH_HASH_SALT` (mediflow) y `ENCRYPTION_KEY` + `SYNC_PASSWORD_KEY` (parse). El [DRP](../disaster-recovery-plan.md) asume que restaurar la base restaura los datos: si el cifrado es de aplicación, **restaurar `mediflow_db` sin la clave devuelve filas ilegibles**. *Acción A7 de G7:* determinar dónde se respaldan, verificar la recuperación en el próximo restore drill y cubrir el escenario en el BCP (G9) | RT | — |
+| **R16** | **Contraseñas de cuentas de SO fuera de todo inventario y política** — materializado en una exposición | [G7 §3.3](./g7-rotacion-secretos.md) | **A** | M | 🟡 Medio | Mitigar | El alcance original de G7 cubría roles de PostgreSQL y claves SSH pero **no** las contraseñas de las cuentas con `sudo`. El 2026-08-09 la contraseña de `axiomacloud` quedó **expuesta en claro** en una sesión de asistente. ⚠️ **Corrección del mismo día:** este riesgo se elevó a 🔴 por creer que se había reactivado `PasswordAuthentication`; **la reactivación nunca tuvo efecto** y se devuelve a 🟡. Ver R18 por el residual real. El mitigante estructural **se sostiene**: `sshd -T` confirma `passwordauthentication no` y `permitrootlogin no` en los 4 servers verificados. *Acción A6 de G7:* rotar la contraseña igual — sigue expuesta y sirve para `sudo` y para la consola del proveedor | RT | — |
+| **R17** | 🔴 **Repo de secretos ilegible — pérdida efectiva de la clave age**: los servers son la única copia de la configuración de 11 apps | [G7 §7.1](./g7-rotacion-secretos.md) | **Materializado** | **A** | 🔴 **Alto** | Mitigar | **No es un riesgo potencial: ya ocurrió.** La clave privada age no está ni en el equipo de trabajo ni en el gestor de contraseñas. Ningún secreto se perdió (los valores viven en los `.env` de cada server), pero `infra-secrets` quedó como **16 archivos que nadie puede descifrar**. Deja **inejecutables** el Paso 5 del [DRP de app](../drp-app-hub-drill.md) y la Fase 7 del [estándar](../estandar-despliegue.md): ante la pérdida de un server se recupera la base pero **no la configuración**. 🔴 **Compuesto con R15:** si se pierde axioma antes de reconstituir, se va con él la `ENCRYPTION_MASTER_KEY` y `mediflow_db` queda **permanentemente ilegible** aun restaurando de backup. *Acción A9 de G7*, prioridad máxima; **A9.1** (respaldar primero las claves de cifrado) es lo único irreversible | RT | AN |
+| **R18** | **Cambio de `sshd` escrito pero nunca aplicado — habilitación latente de password auth** | Verificación in-situ 2026-08-09 | **A** | **A** | 🔴 **Alto** | **Evitar** | El 2026-08-09 20:54 se creó `/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf` con `Match User axiomacloud` + `PasswordAuthentication yes` en los **4 servers**. **Nunca tomó efecto**: `sshd` no se recargó (activo desde jul-14/jul-16/jul-17/ago-01), por lo que la config viva sigue en `no`. **El riesgo es que el archivo sigue en disco**: el próximo `reload`, actualización de OpenSSH o reboot —incluido uno iniciado por el proveedor— **enciende password auth de forma silenciosa**, con una contraseña ya expuesta (R16) y el 22/2222 abierto a internet. Un cambio que no se aplicó es más peligroso que uno que sí, porque nadie lo está mirando. *Acción:* **borrar el archivo en los 4 servers**, no simplemente no recargar | RT | — |
+| **R19** | **~43 llaves SSH de terceros en `/root/.ssh/authorized_keys`, sin inventariar** | S10 / relevamiento 2026-08-09 | M | **A** | 🟡 Medio | Mitigar | axioma **46**, clubix **43**, dev-1 **43** entradas, de las cuales ~43-44 son de `@donweb.com`. **Hoy inertes** por `PermitRootLogin no` — el fix del 2026-07-17 les cortó el acceso sin que se registrara ese efecto. Quedan como **acceso latente**: revertir esa directiva (o que la revierta una actualización) reabre las ~43 de golpe. axiodemo tiene **0**, lo que prueba que el server puede operar sin ellas. *Acción:* inventariar, decidir cuáles conservar y **purgar el resto**; no depender de una sola directiva como control | RT | AN |
+| **R20** | 🔴 **El proveedor de hosting tiene acceso administrativo efectivo a dev-1, que aloja 16 copias de bases productivas** — incluida `mediflow_db` (🔴 salud) | S10 / auth.log 2026-08-09 | **Materializado** | **A** | 🔴 **Alto** | Mitigar | **48 llaves `@donweb.com` en `/home/axiomacloud/.ssh/authorized_keys` de dev-1** (53 en total) — no en `root`, sino **en la cuenta de operación, que tiene `sudo` sin contraseña**. Sin `from=` ni `command=`. **Uso confirmado:** `santiago.fernandez@donweb.com` autenticó como **root** el **2026-07-14 a las 11:29 y 12:32** desde `200.58.112.191` (IP de dattaweb documentada), y `lastlog` registra un acceso previo el **2026-06-11 02:39** desde la misma IP. **No hay evidencia de exploración interactiva** (el `bash_history` de root es continuo de ene a ago y no tiene comandos el 13–15 de julio), pero **tampoco puede descartarse acceso a datos**: un `ssh host comando` o un `scp` no dejan rastro en el historial, y `auditd` solo retiene 2 días. Bajo la **Ley 25.326** esto convierte al proveedor en **encargado de tratamiento de datos de salud**, no en un proveedor de monitoreo — figura que [G8 §4](./g8-clasificacion-datos.md) declaraba explícitamente como *"sin acceso a datos de aplicación"* | RT | **AN** |
 
 ## 3. Riesgos de desastre (derivados del DRP)
 
@@ -59,11 +67,44 @@
 
 ## 4. Resumen y riesgos priorizados
 
-- **Total:** 12 riesgos operativos/gobierno + 4 escenarios de desastre.
-- **🔴 Alto:** R08 (bus factor de ejecución), RD-A (corrupción de datos). Son los de atención prioritaria.
-- **🟡 Medio:** R02, R06, R09, R10, R11, R12, RD-B, RD-C, RD-D.
+- **Total:** **20** riesgos operativos/gobierno + 4 escenarios de desastre. *(2026-08-09: +8 — R13 a R20,
+  derivados de la redacción de G8, del inventario desagregado de secretos (G7 §3.2), de la pérdida efectiva
+  de la clave age y del **primer relevamiento in-situ con acceso a los servers** — S10, A8 y C2.)*
+- **🔴 Alto:** R08 (bus factor de ejecución), **R13** (posibles datos productivos 🔴 en dev-1),
+  **R14** (el blocklist del db-agent no protege datos clínicos — **verificado**), **R17** (repo de secretos
+  ilegible — **materializado**), **R18** (cambio de sshd latente), **R20** (acceso administrativo del
+  proveedor a dev-1 — **uso confirmado**), RD-A (corrupción de datos).
+- **🟡 Medio:** R02, R06, R09, R10, R11, R12, **R15**, **R16**, **R19**, RD-B, RD-C, RD-D.
 - **🟢 Bajo:** R01, R03, R04, R05, R07.
 - **Aceptados (requieren firma AN):** R03, R05, R12.
+- **Pendientes de aprobación de la AN por su nivel 🔴:** R13, R14 y **R20** — los tres tocan el tratamiento
+  de datos del art. 7 de la Ley 25.326, así que la decisión no es solo técnica. **R20 además tiene
+  consecuencia contractual**: obliga a formalizar un acuerdo de tratamiento con el proveedor o a sacar los
+  datos productivos de dev-1.
+
+> **Nota de tendencia (2026-08-09).** El registro pasó de 12 a 17 riesgos en un día. **Cuatro de los cinco
+> nuevos ya existían y no estaban vistos** — aparecieron al redactar G7 y G8, o sea que el marco está
+> funcionando como instrumento de detección y no solo de registro. Tres de ellos (R13, R14, R15) convergen
+> en el mismo punto ciego: **dónde viven realmente los datos de salud y quién puede leerlos**.
+>
+> **El quinto es distinto y hay que decirlo sin adornos.** **R17 no es un riesgo detectado: es un control
+> que falló.** La custodia de la clave age figuraba como "✅ Vigente y verificada" en G7 §2 y resultó no
+> existir. Es el segundo falso verde del marco después de H06, y por la misma causa: **se declaró
+> verificado algo para lo cual no había evidencia de verificación**. La diferencia con H06 es que esta vez
+> el propio marco venía señalando el hueco — C10 de [G6](./g6-revisiones-periodicas.md) es exactamente la
+> cadencia que lo habría detectado, y estaba sin ejecutar. El marco identificó el control correcto; lo que
+> faltó fue **correrlo**. Es el argumento más fuerte disponible para el punto que G6 sostiene desde su
+> primera línea: *una cadencia sin registro de ejecución no es un control, es una intención.*
+>
+> **Segunda nota (misma fecha, tras el primer relevamiento con acceso a los servers).** R18, R19 y R20
+> aparecieron en las primeras horas de mirar los servers en vivo, y los tres comparten una característica:
+> **ninguno era deducible desde la documentación**. Todo el marco G1–G8 se construyó leyendo el repo, y
+> por eso describía con precisión lo que estaba escrito y no lo que estaba pasando. La brecha más cara no
+> fue un control ausente sino **una afirmación documentada que había dejado de ser cierta** — G8 §4 decía
+> que el proveedor no tenía acceso a datos de aplicación mientras 48 de sus llaves vivían en la cuenta con
+> `sudo` del server que aloja las copias productivas. La conclusión para la cadencia **C4** (auditoría de
+> accesos, trimestral, hoy sin ejecuciones) es directa: **auditar accesos contra el server, nunca contra
+> el documento.**
 
 ## 5. Gobierno del registro
 
