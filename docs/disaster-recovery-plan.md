@@ -4,7 +4,7 @@
 | Campo | Valor |
 |---|---|
 | Versión | 1.0 |
-| Fecha de última actualización | 2026-07-22 (§7.2/§7.3: registro de drills del 07-19; Apéndice A del 07-04) |
+| Fecha de última actualización | 2026-08-09 (Apéndice A.0: equivalencia alvera = mediflow, verificada in-situ. Previo: §7.2/§7.3 con los drills del 07-19; inventario del Apéndice A del 07-04) |
 | Próxima revisión obligatoria | 2026-08-29 (trimestral) |
 | Responsable técnico | martin4yo@gmail.com |
 | Repositorio | InfraMonitoreo — rama principal |
@@ -382,13 +382,39 @@ Este DRP debe revisarse en las siguientes circunstancias:
 > → `pg_dump <base>` de ahí → `pg_restore` en el destino. Ver §2 (escenarios) y el Restore Drill
 > Procedure para los comandos.
 
+### ⚠️ A.0 — Equivalencia de nombres: **alvera = mediflow**
+
+**Leé esto antes de buscar nada por nombre de aplicación.** Hay **una** app cuyo nombre no coincide con
+el de sus artefactos en la infraestructura, y es la que maneja **datos de salud**:
+
+| Si te dicen… | Buscá… |
+|---|---|
+| *"recuperá **alvera**"* | Base **`mediflow_db`** · directorio **`/var/www/mediflow`** · usuario de SO **`mediflowapp`** · unidad **`pm2-mediflowapp.service`** · app PM2 **`mediflow-backend`** · rol PostgreSQL **`mediflowuser`** |
+
+`alvera` es el **nombre actual** de la aplicación; `mediflow` es el anterior y **se conserva a propósito**
+en la infraestructura — renombrar base, rol, usuario y unidad de systemd en una app productiva tiene más
+riesgo que beneficio. **No es un pendiente ni un error a corregir.**
+
+El rename llegó hasta **nginx y los dominios** y se detuvo ahí:
+
+- **Dice `alvera`:** los vhosts `alvera` y `alvera.com.ar`, los dominios `alvera.axiomacloud.com`,
+  `api.alvera.axiomacloud.com`, `alvera.com.ar`, y la clave `ALVERA_DATABASE_URL` del `axio-db-agent`.
+- **Dice `mediflow`:** todo lo demás, incluida **la base y el rol**.
+
+> **Por qué está en el DRP y no solo en la documentación de gobierno.** Bajo presión, en medio de un
+> incidente, esta traducción cuesta minutos que el RTO no presupuesta — y el riesgo mayor no es la
+> demora sino **buscar una base llamada `alvera_db` que no existe** y concluir que el backup falló.
+> Todas las demás apps **sí** coinciden con sus artefactos (`mini`→`mini_db`/`miniapp`,
+> `parse`→`parse_db`/`parseapp`, `hub`→`hub_db`, `elore`→`elore_db`/`eloreapp`); alvera es la única
+> excepción. *Verificado in-situ en axioma el 2026-08-09.*
+
 ### `AxiomaCloudProd` — servidor **axioma** (66.97.45.210, PG14) — 11 bases
 
 | Base | Tamaño aprox. |
 |---|---|
 | mini_db | 113 MB |
 | parse_db | 77 MB |
-| mediflow_db | 18 MB |
+| mediflow_db ← **app `alvera`** (ver A.0) | 18 MB |
 | elore_db | 13 MB |
 | hub_db | 12 MB |
 | axiomadocs | 11 MB |
@@ -464,4 +490,5 @@ done
 
 ---
 
-*Documento generado el 2026-05-29. Revisión trimestral obligatoria. Apéndice A actualizado 2026-07-04.*
+*Documento generado el 2026-05-29. Revisión trimestral obligatoria. Inventario del Apéndice A actualizado
+2026-07-04; equivalencia de nombres (A.0) agregada el 2026-08-09.*
