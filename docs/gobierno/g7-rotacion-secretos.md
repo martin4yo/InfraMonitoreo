@@ -130,10 +130,9 @@ cuentas personales), salvo en cuanto a exigir MFA donde el proveedor lo ofrezca.
 | 15 | `axioma/mini-frontend.env` | — (solo `VITE_*` públicas) | 🟢 Sin secretos |
 | 16 | `axioma/parse-frontend.env` | — (solo `NEXT_PUBLIC_API_URL`) | 🟢 Sin secretos |
 
-**Totales:** 15 `DATABASE_URL` · 8 `JWT_SECRET` · 8 `ANTHROPIC_API_KEY` · 6 credenciales SMTP/email ·
-4 claves de cifrado de datos · 2 `GEMINI_API_KEY` · 2 pares Twilio · ~8 API keys internas
-(`AXIO_API_KEY`, `AGENT_API_KEY`, `HUB_API_KEY`, `ML_SERVICE_API_KEY`, `PARSE_API_KEY`,
-`AXIO_KB_EXPORT_KEY`, `MINI_AGENT_TOKEN`, `AUTHENTICATION_API_KEY`).
+**Totales sobre los 15 `.env` que el repo tenía.** El recuento definitivo, sobre los **36 archivos reales**
+y distinguiendo variables **cargadas** de **declaradas vacías**, está en §3.5 — la distinción importa: una
+variable vacía no es un secreto, y contarla infla el inventario.
 
 ### 3.4 Relevamiento in-situ — el repo cubría el 42% (2026-08-09)
 
@@ -163,6 +162,34 @@ re-cifrados con el par age nuevo, con roundtrip verificado **37/37 valor por val
 > hizo leyendo los servers. **Solo el segundo encontró que faltaba dev-1**, porque un inventario construido
 > desde el repo solo puede describir lo que el repo ya contiene. Es el mismo patrón que produjo el hallazgo
 > del proveedor en [G8 §4.2](./g8-clasificacion-datos.md): **el documento no puede auditarse a sí mismo.**
+
+### 3.5 Recuento definitivo de secretos de terceros (36 archivos, 2026-08-09)
+
+Sobre los **510 pares `variable=valor`** de los 36 `.env`, distinguiendo **cargadas** de **declaradas
+vacías**. La distinción no es cosmética: una variable vacía **no es un secreto que rotar ni que proteger**,
+y contarla como tal infla el inventario y desvía el esfuerzo.
+
+| Credencial de tercero | Cargadas | Vacías | Dónde |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | **14** | 1 | axioma (4, incluida **mediflow**), axiodemo (3), dev-1 (7). Vacía en clubix |
+| `GEMINI_API_KEY` | **6** | 0 | axioma (parse), axiodemo, dev-1 (4) |
+| `TWILIO_AUTH_TOKEN` | **2** | 2 | Solo **hub** (axioma + dev-1). **Vacías en mediflow** — mediflow *no* envía SMS |
+| `WHATSAPP_BUSINESS_API_TOKEN` | **2** | 0 | hub (axioma + dev-1) |
+| `MERCADOPAGO_ACCESS_TOKEN` | **1** | 0 | **clubix** — confirma la corrección de S12 |
+
+**Dos precisiones que corrigen el conteo preliminar de §3.2** (hecho sobre los 15 archivos del repo):
+
+1. Las claves de Anthropic no son 8 sino **14 cargadas**, porque dev-1 —ausente del repo— suma 7 más.
+2. **`mediflow` sí tiene una clave de Anthropic cargada** (108 caracteres). Es el dato que vuelve concreta
+   la preocupación de [G8 §4.1](./g8-clasificacion-datos.md): la aplicación de la única base 🔴 del marco
+   tiene credencial viva de un proveedor de IA. Sigue sin poder afirmarse *qué* se envía —eso exige leer el
+   código— pero el canal está **habilitado**, no solo declarado.
+
+> **Nota de método.** Estas 7 variables vacías aparecieron al verificar, antes de commitear, que todos los
+> valores hubieran quedado cifrados: `sops` no cifra un valor vacío, así que saltaron como "sin cifrar".
+> No eran una fuga —no hay nada que filtrar en una variable vacía— pero el control de verificación
+> encontró de paso un error real de inventario. **Vale la pena dejarlo escrito: el chequeo previo al
+> commit es el que debe atrapar esto, no la revisión posterior.**
 
 ### 3.3 Hallazgos del inventario (2026-08-09)
 

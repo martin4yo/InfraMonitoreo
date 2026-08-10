@@ -175,9 +175,10 @@ aloja `mediflow_db`, el objeto son datos del **art. 7**.
 
 ### 4.1 Transferencia a proveedores de IA (hallazgo 2026-08-09)
 
-El inventario desagregado de secretos ([G7 §3.2](./g7-rotacion-secretos.md)) mostró que **8 de las apps
-tienen credenciales de proveedores de IA**, entre ellas **`mediflow-backend`**, que es la aplicación de la
-única base **🔴 Sensible** del marco. Esta clasificación **no contemplaba ese canal**: se analizaron los
+El inventario de secretos ([G7 §3.5](./g7-rotacion-secretos.md)) mostró que **14 `.env` tienen una
+`ANTHROPIC_API_KEY` cargada** y **6 una `GEMINI_API_KEY`** — sobre los 36 archivos reales, no sobre los 15
+que el repo tenía. Entre ellas **`mediflow-backend`**, la aplicación de la única base **🔴 Sensible** del
+marco, con una clave de **108 caracteres efectivamente cargada** (no una variable vacía declarada). Esta clasificación **no contemplaba ese canal**: se analizaron los
 terceros de *infraestructura* (R2, VPS, dattaweb, Netdata) pero no los de *aplicación*.
 
 Es material para el cumplimiento porque, si una app envía contenido de sus registros a un modelo, hay
