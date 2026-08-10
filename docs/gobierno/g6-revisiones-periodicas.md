@@ -99,11 +99,20 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 |---|---|---|---|---|---|
 | 2026-07-20 | `npm audit` — **hub** (backend + frontend) | martin4yo | 61 vulns (3 críticas) → **11** (0 críticas) | Remediado dentro de semver + mitigación `disableEval` para la cadena de `pdfjs`; 57/57 tests en PASS | ✅ **Desplegado y verificado** (H13, sin rollback) |
 | 2026-07-23 | `unattended-upgrades` — los 5 servidores (relevamiento, solo lectura) | martin4yo | Operativo en 5/5; los 5 aplicaron upgrades de seguridad ese mismo día | Cobertura de parcheo automático 100%. `Automatic-Reboot=false` → kernel requiere reboot manual en ventana | ✅ **Verificado** |
-| _pendiente_ | Ciclo mensual completo — `npm audit` de **todas** las apps propias + `apt list --upgradable` en los 5 | — | — | — | ⬜ Programado ~2026-08-19 |
+| **2026-08-09** | **Primer ciclo completo de C3/C5** — `npm audit --package-lock-only` en **42 proyectos** de los 4 servidores alcanzables + `apt list --upgradable` + versiones de runtime. Informe: [`relevamiento-vulnerabilidades-2026-08-09.md`](../relevamiento-vulnerabilidades-2026-08-09.md) | martin4yo | **Producción, solo runtime: 8 críticas · 154 altas · 107 medias** (con devDependencies: 13 · 224 · 140). dev-1: 23 · 343 · 197. Solo 2 de 42 proyectos limpios. Peor caso `clubix/server` (4 críticas, 30 altas, con pasarela de pago viva); `mediflow/backend` sin críticas pero con 23 altas y es la app de la base 🔴 | **73 paquetes crít./altos distintos → 53 con fix compatible (nivel 1), 17 con salto mayor (nivel 2), 3 sin fix upstream (nivel 3)**. 🔴 **Hallazgo de SO: los 4 servidores requieren reboot** — axioma y clubix con 2 kernels de atraso, `libc6` pendiente de activación en los 4. 0 paquetes de seguridad sin descargar: el parcheo automático funciona, lo que falta es la **ventana de reinicio** | ✅ **Relevado, sin remediar.** Solo lectura |
+| _pendiente_ | Segundo ciclo mensual completo | — | — | — | ⬜ ~2026-09-09 |
 
-> **Estado del proceso:** las dos entradas de julio son **ejecuciones reales pero puntuales**, no un ciclo
-> completo. El gap G4 pasa a 🟢 cuando acumule **≥2 ciclos mensuales completos** ejecutados y registrados
-> aquí (criterio de [G4 §7](./g4-gestion-vulnerabilidades.md)). Riesgo asociado: **R09**.
+> **Estado del proceso:** las dos entradas de julio eran **ejecuciones reales pero puntuales**. El
+> **2026-08-09 se ejecutó el primer ciclo completo** (42 proyectos, 4 servidores, npm + SO). El gap G4 pasa
+> a 🟢 cuando acumule **≥2 ciclos mensuales completos** (criterio de
+> [G4 §7](./g4-gestion-vulnerabilidades.md)): **falta el segundo, ~2026-09-09**. Riesgo asociado: **R09**.
+>
+> ⚠️ **Lo que el primer ciclo dejó al descubierto sobre el proceso mismo:** el parcheo automático del SO
+> funciona (0 paquetes de seguridad sin descargar en los 4 servidores) pero **ninguno se reinició nunca**,
+> así que kernels y `libc6` están instalados y **sin activar** — axioma y clubix con dos versiones de
+> atraso. `Automatic-Reboot=false` es una decisión razonable, pero **sin una ventana de reinicio
+> programada convierte el parcheo automático en parches que no protegen de nada**. La cadencia que falta
+> no es de escaneo sino de **reinicio**: se propone incorporarla como **C11** en la próxima revisión (C6).
 
 **Pendiente de política arrastrado desde G4 §6:** unificar el alcance de `unattended-upgrades` (axioma y
 dev-1 incluyen `-updates`; clubix, axiodemo y axioma-drp solo `-security` + ESM). Decidir a propósito el
