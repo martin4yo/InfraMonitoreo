@@ -264,24 +264,68 @@ a los secretos). Los 🔴 iniciales tras el fix SSH (3 `.env` de mini en 777, fi
 bloqueado por dattaweb), apps Node/Next en `0.0.0.0` (H04, patrón `-H`/redirects + 3 que requieren cambio de
 código). Ver "Pendientes dev-1" abajo.
 
-### axioma-drp (170.78.75.249) — server bare, casi vacío
-Ubuntu 22.04, solo SSH escucha. Sin Postgres/nginx/apps/pgBackRest/Netdata. SSH ya homologado. **Hallazgo
-🔴**: usuario `linuxadmin` (provisioning 2022, ajeno a Axioma) con password activa + sudo + llave ajena
-`mfourgeaux@KEYSOFT-I7` → **password bloqueada** (`passwd -l`, 2026-07-17); usuario+sudo conservados para
-emergencia (solo entra por llave). ✅ **ufw instalado y activo** (2026-07-17): default-deny, allow 22/80/443.
-**Rol definido (2026-07-17): banco de pruebas de DRP _por aplicación, de a una_** — NO réplica de infra completa.
-✅ **Disco ampliado (2026-07-17)**: el VPS se agrandó y se propagó la cadena LVM online (growpart sda3 →
-pvresize → lvextend +100%FREE → resize2fs ext4, sin reboot). `/` pasó de **12 G a 64 G** (53 G libres).
-Backup de la tabla de particiones en `/root/sda-parttable.bak-*.sfdisk`. Queda ~2 G sin asignar en el VG
-(remanente por redondeo de extents; disponible para un LV aparte de `/var/lib/postgresql` si hiciera falta).
-✅ **Netdata instalado + claimed (2026-07-17)**: agente v2.10.4 (stable, igual que los otros 4) reclamado al
-mismo Space/Room de Netdata Cloud, ACLK conectado, reportando. `:19999` no expuesto en ufw (reporta saliente).
-Faltan los colectores específicos (postgres/nginx/pgBackRest) — se suman con `scripts/20-deploy-configs.sh`
-cuando haya apps para cada prueba de restore.
-✅ **fail2ban arreglado (2026-07-17)**: el jail sshd estaba caído (buscaba `/var/log/auth.log` inexistente,
-el server usa journald). Fix: `jail.local` con `backend = systemd` + jail sshd puerto 22 + `ignoreip` con las
-5 IPs de la infra. Config test OK, servicio active, leyendo del journal. SSH con rate-limiting de nuevo.
-Pendiente menor: `ubuntu` NOPASSWD del cloud-init (password ya bloqueada). Para integrar: pgBackRest cuando se arme cada prueba.
+### axioma-drp (170.78.75.249) — server bare + **REINSTALADO 2026-08-08, rearmado 2026-08-11**
+
+> 🔴 **Se reinstaló el sistema operativo el 2026-08-08** (boot 23:28 UTC), sin aviso ni registro previo.
+> **Todo el hardening del 2026-07-17/07-20 se perdió.** Detectado el 2026-08-11 al fallar el acceso SSH
+> (la llave no estaba en el server). Estado encontrado: `ufw` **desinstalado**, `fail2ban` en **failed**,
+> Netdata/pgBackRest/PostgreSQL **ausentes**, disco de vuelta en **12 G**, `PasswordAuthentication yes` +
+> `PermitRootLogin without-password`, y la password de `linuxadmin` **desbloqueada** (el `passwd -l` se
+> perdió). **Lección**: este server no está bajo ninguna gestión de configuración — cualquier reinstalación
+> del proveedor lo devuelve a fábrica y no hay quién lo detecte. Ver gap abierto al final de la sección.
+
+**Rol (sin cambios): banco de pruebas de DRP _por aplicación, de a una_** — NO réplica de infra completa.
+
+Rearmado completo el **2026-08-11**, todo verificado en vivo:
+
+- ✅ **Llave ajena eliminada**: `mfourgeaux@KEYSOFT-I7` (`SHA256:K/yJkjhyAQ/hO2WS9ybqZc6/eR0j6VFGRxL6WJoC1ko`)
+  **sobrevivió a la reinstalación** en el `authorized_keys` de `linuxadmin` — es decir, venía en la imagen de
+  provisioning del proveedor, no era un resto local. Purgada de `linuxadmin` y de `axiomacloud`
+  (backups `.bak-<ts>`). Hoy ambos tienen **solo** `axiomacloud@keysoft-i5`.
+- ✅ **Usuario `axiomacloud` creado** (uid 1002, grupo sudo, `NOPASSWD` en `/etc/sudoers.d/90-axiomacloud`),
+  alineado con los otros 4 servers y con lo que declara `inventory.sh`. Los scripts del repo ya corren acá
+  sin editar el inventario. `linuxadmin` queda como **acceso de emergencia** (password activa, sudo con
+  password). **Desvío deliberado respecto de julio**: NO se re-aplicó `passwd -l` a `linuxadmin`, porque sin
+  `NOPASSWD` eso deja la cuenta de emergencia sin poder autenticar `sudo` — el objetivo de H10 (cortar el
+  brute-force) lo cumple `PasswordAuthentication no`, que es más fuerte y no tiene ese efecto lateral.
+- ✅ **SSH homologado**: drop-in `/etc/ssh/sshd_config.d/99-hardening.conf` con `PermitRootLogin no` +
+  `PasswordAuthentication no` + `PubkeyAuthentication yes` + `KbdInteractiveAuthentication no`. `sshd -t` OK,
+  aplicado con `reload` (no restart). Verificado desde sesión nueva: llave entra, password y root **rechazados**.
+- ✅ **Password de root definida** (2026-08-11) para que `su -` funcione como en los otros 4 (root estaba en
+  `L`/bloqueada desde el provisioning 2022, herencia de la imagen). Solo sirve por consola local: root
+  sigue cerrado por SSH.
+- ✅ **Disco reampliado**: cadena LVM online otra vez (backup de tabla de particiones → `growpart /dev/sda 3`
+  → `pvresize` → `lvextend -l +100%FREE` → `resize2fs`, sin reboot). `/` pasó de **12 G a 51 G** (41 G libres),
+  VG sin espacio remanente. ⚠ Ojo: el disco quedó en **55 G**, no en los 64 G de julio — la reinstalación
+  también revirtió el tamaño del VPS. Backup en `/root/sda-parttable.bak-20260811-211657.sfdisk`.
+- ✅ **ufw reinstalado y activo**: default deny incoming / allow outgoing, allow 22/80/443 (v4 y v6),
+  `enabled` al boot. SSH verificado vivo después de habilitarlo.
+- ✅ **fail2ban arreglado** (mismo fallo que en julio: `Have not found any log file for sshd jail`, porque el
+  server usa journald y no tiene `/var/log/auth.log`). `jail.local` con `backend = systemd` + jail sshd
+  puerto 22 + `ignoreip` con las 5 IPs de la infra. `fail2ban-client -t` OK, servicio `active`, leyendo del
+  journal (enganchó 2 intentos fallidos en el primer minuto).
+- ✅ **Netdata reinstalado + claimed**: v2.10.4 stable (igual que los otros 4), reclamado al mismo Space/Room,
+  `Claimed: Yes` + `Online: Yes`. `bind to = 127.0.0.1` (ACLK es saliente por 443) y override
+  `hostname = axioma-drp` en `netdata.conf`, ambos en bloques marcados idempotentes. Backup `.bak-<ts>`.
+  ⚠ El kickstart imprime `Failed to write claiming configuration` como warning — es **falso**: el claim se
+  escribió bien, confirmar siempre con `netdatacli aclk-state`.
+- ✅ **PostgreSQL 14.23 + pgBackRest instalados** desde PGDG (`postgresql-14`, `pgbackrest`). PG `active`.
+  ⚠ **pgBackRest quedó en 2.59.0, no 2.58.0** como los otros 4: PGDG ya no sirve 2.58.0. No es problema para
+  el rol de drp (lee S3 directo, sin protocolo SSH contra el repo host, y 2.59 lee repos escritos por 2.58).
+- ✅ **pgBackRest apuntado a R2 y verificado**: `/etc/pgbackrest/pgbackrest.conf` (640 `postgres:postgres`)
+  con **repo1 = Cloudflare R2** (bucket `axiomacloud-pgbackrest`, path `/pgbackrest`, `aes-256-cbc`),
+  stanza `AxiomaCloudProd` con `pg1-path=/var/lib/postgresql/14/main`. `pgbackrest info` devuelve
+  **`status: ok`** y la cadena completa, con el último incremental del **2026-08-11 18:00 UTC** (backups de
+  producción al día). Credenciales recuperadas de `axioma`. **No tiene `repo1-host` contra dev-1**: drp
+  restaura desde R2 directamente. ⚠ **No correr `expire` desde drp** — ese repo es el de producción.
+
+**Pendientes**: colectores específicos de Netdata (postgres/nginx/pgBackRest) — se suman con
+`scripts/20-deploy-configs.sh` cuando haya apps para cada prueba de restore. `ubuntu` NOPASSWD del cloud-init.
+
+**Gap de gobierno abierto (2026-08-11)**: no hay ningún control que detecte que este server volvió a fábrica.
+Se enteró por casualidad, 3 días después. Netdata Cloud habría mostrado el nodo caído — conviene una alarma de
+nodo ausente, y/o incluir a axioma-drp en la revisión periódica de G6 con verificación de que ufw/fail2ban/SSH
+siguen homologados. Mientras el rearmado sea manual, esto se repite en la próxima reinstalación.
 
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.

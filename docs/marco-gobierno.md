@@ -32,8 +32,13 @@
 | **G6** | [Cadencia y registro de revisiones periódicas](./gobierno/g6-revisiones-periodicas.md) | ✅ v1 redactada — 🟡 **C2, C4 y C10 ejecutadas por primera vez el 2026-08-09** |
 | **G7** | [Política de rotación e inventario de secretos](./gobierno/g7-rotacion-secretos.md) | ✅ v1 redactada — 🔴 **la clave age se perdió** (§7.1); repo reconstituido, custodia pendiente |
 | **G8** | [Clasificación de datos y cumplimiento](./gobierno/g8-clasificacion-datos.md) | ✅ v1 redactada — 🔴 **el proveedor de hosting es encargado de tratamiento** (§4.2), sin contrato |
-| **G9** | Continuidad de negocio (BCP) | ⬜ pendiente |
-| **G10** | Procedimiento de verificación de remediaciones | ⬜ pendiente |
+| **G9** | [Plan de continuidad de negocio (BCP)](./gobierno/g9-continuidad-negocio.md) | ✅ v1 redactada — 🟡 kit de continuidad inventariado, sin prueba ejecutada |
+| **G10** | [Procedimiento de verificación de remediaciones](./gobierno/g10-verificacion-remediaciones.md) | ✅ v1 redactada — 🟡 sin cierres ejecutados con la checklist |
+
+> **Marco completo — 10 de 10 documentos redactados (2026-08-11).** Ninguno está en 🟢: los diez son
+> políticas escritas a la espera de evidencia de ejecución. Es un hito de cobertura documental, **no de
+> madurez de control** — y la distinción importa, porque el 2026-08-09 mostró que un documento puede
+> describir con precisión algo que dejó de ser cierto.
 
 > A medida que cada documento se redacta, esta tabla y el §8 del dossier se actualizan. Los links de
 > los gaps aún pendientes se activan cuando su archivo se crea.

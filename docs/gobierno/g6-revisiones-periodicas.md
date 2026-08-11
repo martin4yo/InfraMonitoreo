@@ -29,6 +29,8 @@
 | **C8** | **Verificación de backups** — `pgbackrest check` en las 4 stanzas + frescura | Continua (alarmas Netdata) + confirmación en el drill mensual | RT | [G1 §6](./g1-politica-seguridad.md) | Netdata Cloud + C1 |
 | **C9** | **Ejercicio de incidente simulado** | Anual | RT + BT | [G5 §8](./g5-respuesta-incidentes.md) | §7 de este documento |
 | **C10** | **Revisión del inventario de secretos y rotación programada** | Semestral (inventario) · según [G7 §4](./g7-rotacion-secretos.md) (rotación) | RT | [G7](./g7-rotacion-secretos.md) | G7 §5 (registro de rotaciones) |
+| **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 de este documento |
+| **C12** | **Prueba de continuidad** — restaurar el kit desde los respaldos declarados, en equipo limpio | Semestral | **BT** (no el RT) | [G9 §6](./g9-continuidad-negocio.md) | §7 de este documento |
 
 ### 1.1 Anclaje del calendario
 
@@ -36,9 +38,9 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 
 | Ciclo | Anclaje | Actividades |
 |---|---|---|
-| **Mensual** | ~día **19** de cada mes | C1, C2, C3 |
+| **Mensual** | ~día **19** de cada mes | C1, C2, C3, **C11** (reinicio, en la misma ventana) |
 | **Trimestral** | **23 de ene / abr / jul / oct** | C4, C5, C6, C7 |
-| **Semestral** | **23 de ene / jul** | C10 (inventario) |
+| **Semestral** | **23 de ene / jul** | C10 (inventario de secretos) · **C12** (prueba de continuidad) |
 | **Anual** | a definir en el primer ejercicio | C9 |
 
 > El anclaje mensual al día 19 consolida drill + escaneo + verificación de acceso en una sola ventana de
@@ -84,8 +86,20 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 
 | Fecha | Ejecutor | axioma | clubix | axiodemo | dev-1 | axioma-drp | Acceso BT | Resultado |
 |---|---|---|---|---|---|---|---|---|
-| **2026-08-09** | martin4yo | ✅ OK | ✅ OK (:2222) | ✅ OK | ✅ OK | ❌ **22/tcp filtrado** desde el equipo nuevo | ⬜ No verificado | 🟡 **4 de 5.** Primera ejecución registrada de C2 |
+| **2026-08-09** | martin4yo | ✅ OK | ✅ OK (:2222) | ✅ OK | ✅ OK | ⚠️ No alcanzado | ⬜ No verificado | 🟡 **4 de 5.** Primera ejecución registrada de C2 |
+| **2026-08-11** | martin4yo | ✅ OK | ✅ OK (:2222) | ✅ OK | ✅ OK | ✅ **OK** — `sudo` NOPASSWD | ⬜ No verificado | ✅ **5 de 5.** Ver corrección abajo |
 | _pendiente_ | — | — | — | — | — | — | — | ⬜ Próxima ~2026-09-09 |
+
+
+> ⚠️ **Corrección del registro del 2026-08-09 (aplicando R5/R7 de [G10](./g10-verificacion-remediaciones.md)).**
+> Ese día se asentó que axioma-drp tenía el **22/tcp filtrado**. Era una **lectura incorrecta de la
+> evidencia**: el puerto estaba abierto y lo que faltaba era la llave del equipo nuevo en ese server. Se
+> confundió *«no puedo entrar»* con *«el puerto está cerrado»*, que son diagnósticos distintos con
+> remediaciones distintas. Verificado el 2026-08-11: acceso OK con `sudo` sin contraseña.
+> **Contexto que faltaba:** a axioma-drp le reinstalaron el SO el **2026-08-08** y se rearmó de cero — el
+> usuario `axiomacloud` se creó ese día. El acceso de emergencia es `linuxadmin` (sudo con password).
+> Un servidor reinstalado 24 h antes del relevamiento explica el hueco, y es justo el tipo de cambio que
+> esta cadencia existe para detectar.
 
 > **Nota de alcance.** El DRP §5.2 lista 4 servidores (es previo a la incorporación de `axioma-drp`).
 > Esta verificación cubre los **5**, incluyendo el host de DRP. Corregir el DRP §5.2 en la próxima
@@ -138,7 +152,7 @@ caso de **dev-1** por ser el repo host de todos los backups. A resolver en la pr
 | Control | Estado verificado | Fuente |
 |---|---|---|
 | SSH sin root ni password en los 5 | ✅ | H05 |
-| Usuarios de provisioning/terceros bloqueados (`linuxadmin` en axioma-drp) | ✅ | H10 |
+| Usuarios de provisioning/terceros bloqueados (`linuxadmin` en axioma-drp) | ⚠ **re-verificar cada vez** — la reinstalación del SO de axioma-drp (2026-08-08) revirtió la mitigación y **reintrodujo la llave ajena desde la imagen del proveedor**. Re-cerrado 2026-08-11 | H10 |
 | `pg_hba` a loopback + `scram-sha-256`, 0 hashes `md5` | ✅ | H01 (cerrado 2026-07-22) |
 | Apps bajo usuario dedicado | ⚠ **parcial** — desvíos abiertos: `mediflow-backend` (dev-1) corre como **root**; `checkpoint-web` como `axiomacloud`; `axio-ml` como `axiomacloud` (R04) | H04 / H11 |
 
