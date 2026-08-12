@@ -371,6 +371,17 @@ Este DRP debe revisarse en las siguientes circunstancias:
 
 ---
 
+> ### 📘 Recuperación de APLICACIONES — documento aparte
+>
+> Este DRP cubre la recuperación de **bases de datos**. Para levantar las **aplicaciones** de axioma en
+> axioma-drp, ver:
+>
+> - **[Runbook general](./drp-recuperacion-axioma-en-drp.md)** — 12 fases parametrizadas por `<app>`
+> - **[Fichas por aplicación](./drp-fichas-apps-axioma.md)** — puerto, base, usuario, repo y particularidades
+>
+> ✅ **Ejecutado por primera vez el 2026-08-12**: hub y alvera recuperadas en drp hasta login funcional.
+> ⚠️ Con un bloqueante abierto: **R21**, el proveedor filtra los puertos 80/443 hacia drp.
+
 ## Apéndice A — Bases de datos por stanza
 
 > **Inventario tomado el 2026-07-04.** Las bases cambian con el tiempo; este apéndice es una

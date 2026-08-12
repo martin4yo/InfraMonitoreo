@@ -218,7 +218,7 @@ Sin tocar producción: datos desde R2, configuración desde `infra-secrets`.
    la raíz pero declara `schema: "prisma/schema.prisma"` **relativo al cwd**, y el schema real está en
    `backend/prisma/`. Desde la raíz falla con *"Could not load schema"*.
 4. 🟡 **Tras `systemctl reload nginx`, el primer request lo atiende el worker viejo** y devuelve la página
-   por defecto. Ya estaba documentado en [`nginx-anti-scanner.md`](../nginx-anti-scanner.md); volvió a
+   por defecto. Ya estaba documentado en [`nginx-anti-scanner.md`](./nginx-anti-scanner.md); volvió a
    morder. **Re-testear a los pocos segundos.**
 
 ### 🔴 Inconsistencias de PRODUCCIÓN que el simulacro destapó

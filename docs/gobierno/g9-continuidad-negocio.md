@@ -45,8 +45,8 @@ escenario real del 2026-08-09.
 | # | Elemento | Dónde vive hoy | Estado |
 |---|---|---|---|
 | **K1** | **Clave SSH** de operación con acceso a los 5 servidores | Equipo del RT + `authorized_keys` de los servers | 🟡 Regenerada el 08-09. **Solo el RT** |
-| **K2** | **Inventario** — IPs, puertos SSH, usuarios, roles | `inventory.sh` (gitignoreado, **no versionado**) | 🟡 Reconstruido el 08-09 desde DNS + documentación |
-| **K3** | **Clave age** — descifra los 37 `.env` de `infra-secrets` | Equipo del RT + LastPass | 🟡 Rotada el 08-09 (la anterior **se perdió**). Falta copia del BT |
+| **K2** | **Inventario** — IPs, puertos SSH, usuarios, roles | `inventory.sh` (gitignoreado) + **procedencia documentada en él** | 🟢 Reconstruido el 08-09 desde DNS + documentación del repo. **Se probó que es reconstruible sin acceso previo** |
+| **K3** | **Clave age** — descifra los 37 `.env` de `infra-secrets` | Equipo del RT + LastPass | 🟡 Rotada el 08-09 (la anterior **se perdió**). ✅ **Probada en el simulacro del 08-12**: descifró los `.env` de hub y alvera. Falta copia del BT |
 | **K4** | **Claves de cifrado de datos de aplicación** (`ENCRYPTION_MASTER_KEY`, `SEARCH_HASH_SALT` de mediflow; `ENCRYPTION_KEY`, `SYNC_PASSWORD_KEY` de parse) | `.env` de cada app + `infra-secrets` | 🔴 **Ver §4.2 — sin ellas el backup es ilegible** |
 | **K5** | **Credenciales de pgBackRest / R2** (`repo2-s3-key`, `cipher-pass`) | `/etc/pgbackrest/*.conf` + `infra-secrets` | ✅ Respaldadas |
 | **K6** | **Acceso al panel del proveedor VPS** (consola, reinicio, reinstalación) | Cuenta del RT | 🔴 **No inventariado ni compartido** |
@@ -54,10 +54,11 @@ escenario real del 2026-08-09.
 | **K8** | **Acceso a Cloudflare** (R2 y DNS de los dominios) | Cuenta del RT | 🔴 **No inventariado.** Sin DNS no hay servicio, aunque los servers estén vivos |
 | **K9** | **Acceso a Netdata Cloud** | Cuenta del RT + `secrets.sh` | ✅ Token de claim respaldado |
 | **K10** | **Este repositorio de documentación** | GitHub (público) | ✅ |
+| **K11** | 🔴 **Configuración de despliegue** — vhosts de nginx, `ecosystem.config.js`, unidades systemd, `.env.production` de los frontends | **[`config/axioma/`](../../config/axioma/)** *(versionado el 2026-08-12)* | 🟡 **Hueco cerrado, pero es una FOTO.** Vivía solo en axioma. Mantenerla al día es parte de C6 |
 
-> 🔴 **El hallazgo más importante de esta sección.** De los diez elementos, **siete dependen exclusivamente
-> del RT** y tres (**K6, K8** y parcialmente **K3**) **no estaban inventariados en ningún lado antes de
-> este documento**. K8 es especialmente grave y contraintuitivo: si se pierde el acceso a Cloudflare, los
+> 🔴 **El hallazgo más importante de esta sección.** De los **once** elementos, **siete dependen
+> exclusivamente del RT** y cuatro (**K6, K8, K11** y parcialmente **K3**) **no estaban inventariados en
+> ningún lado antes de este documento** — K11 apareció recién al ejecutar el simulacro del 08-12. K8 es especialmente grave y contraintuitivo: si se pierde el acceso a Cloudflare, los
 > servidores siguen funcionando perfectamente y **el servicio igual queda caído**, porque nadie puede
 > apuntar los dominios. No hay backup que resuelva eso.
 
@@ -78,6 +79,7 @@ documento*.
 | Proveedor | Qué provee | Si desaparece | SLA | Plan |
 |---|---|---|---|---|
 | **VPS (donweb/dattaweb)** | Los 5 servidores | 🔴 Caída total | ⚠ **Sin acuerdo formal** | §3.1 |
+| **VPS — filtrado de red** | 🔴 **Bloquea 80/443 hacia axioma-drp** (verificado 08-12) | 🔴 **El DR no puede completarse** | ⚠ Sin acuerdo | **R21** — solicitar habilitación. Es una dependencia que **no se puede respaldar ni mitigar desde el servidor** |
 | **Cloudflare R2** | Backups off-site (repo2) | 🟡 Queda repo1 en dev-1 | ⚠ Sin acuerdo | Dual-repo ya mitiga |
 | **Cloudflare DNS** | Resolución de todos los dominios | 🔴 **Servicio caído con servers sanos** | ⚠ Sin acuerdo | §3.2 |
 | **GitHub** | Código + secretos cifrados | 🟡 Código vive también en los servers | Términos estándar | Aceptable |
@@ -127,6 +129,26 @@ Se pierde el equipo desde el que se opera (robo, falla, o simplemente uno nuevo)
 
 **RTO observado:** ~4 horas, con los servidores sanos todo el tiempo.
 **Mitigación:** §2.1 (kit en dos lugares) + §6 (prueba semestral desde equipo limpio).
+
+### 4.1.1 ✅ BC-A probado end-to-end — simulacro del 2026-08-12
+
+**El escenario dejó de ser hipótesis.** Se recuperaron **hub y alvera** en axioma-drp partiendo de cero:
+stack base instalado, base restaurada desde R2, código desde los repos, configuración desde
+`infra-secrets`, y **login funcional en el navegador**. Ambas apps conviviendo en 907 MB de 3911.
+
+**Lo que el simulacro confirmó del kit:**
+
+| | Resultado |
+|---|---|
+| **K2** (inventario) | ✅ Reconstruible desde el propio repo — DNS de los dominios + `from=` de `pgbackrest-setup.md` + puertos de `hardening.md` |
+| **K3** (clave age) | ✅ Restaurada y **probada**: descifró los `.env` de ambas apps |
+| **K7** (GitHub) | ✅ El código salió de los repos, no de axioma |
+| **K11** (config de despliegue) | 🔴 **Faltaba por completo** — se creó a raíz de este ejercicio |
+
+> 🔴 **Y descubrió el bloqueante que ningún inventario mostraba: R21.** El proveedor **filtra 80/443
+> hacia drp**. El kit puede estar completo, el runbook ejecutado y las apps corriendo —y el servicio sigue
+> caído—. **Ningún elemento del kit lo cubría**, porque no es un recurso que se pueda respaldar: es un
+> permiso de red del proveedor. Se incorpora como dependencia crítica en §3.
 
 ### 4.2 BC-B — Pérdida de las claves de cifrado de datos · 🔴 **El hueco más caro**
 
@@ -227,9 +249,11 @@ como **C12**, cadencia **semestral**:
 
 - Este documento se **revisa cada trimestre** (próxima **2026-10-23**) dentro de **C6**, y la prueba de
   continuidad (**C12**) corre **semestralmente**.
-- **Estado del gap G9 al 2026-08-11:** 🟡 — el plan está redactado y el kit de continuidad inventariado
-  por primera vez, con dos escenarios (BC-A y BC-C) **documentados desde su ocurrencia real**, no desde la
-  hipótesis. Pasa a 🟢 cuando: (a) A1, A2 y A3 estén ejecutadas, (b) se haya corrido **una prueba C12
+- **Estado del gap G9 al 2026-08-12:** 🟡 — el plan está redactado, el kit inventariado (11 elementos) y
+  **BC-A probado end-to-end**: se recuperaron hub y alvera en drp hasta login funcional. Tres escenarios
+  (BC-A, BC-C y parte de BC-E) están **documentados desde su ocurrencia real**, no desde la hipótesis.
+  ⚠️ El simulacro descubrió además **R21**, una dependencia de red del proveedor que **ningún elemento del
+  kit puede cubrir** porque no es un recurso respaldable. Pasa a 🟢 cuando: (a) A1, A2 y A3 estén ejecutadas, (b) se haya corrido **una prueba C12
   completa ejecutada por el BT**, y (c) el contrato con el proveedor (A4) tenga resolución de la AN.
 - **Lo que este documento no puede resolver solo.** Tres de sus acciones críticas (A2, A4 y el fondo de
   BC-D) no son técnicas: dependen de **compartir accesos** y de una **decisión contractual**. Un BCP
