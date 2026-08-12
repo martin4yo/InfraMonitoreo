@@ -77,9 +77,33 @@ son **permanentemente ilegibles** y ningún backup lo resuelve.
 | **Logs** | `/var/log/hub/` — **crear el directorio antes de arrancar** |
 | **RAM medida** | 217 MB + 61 MB daemon |
 
+**🔴 Es un MONOREPO con npm workspaces** *(verificado 2026-08-12)*. `package.json` declara
+`workspaces: ['backend','frontend','shared']` y el `node_modules` está **hoisted en la raíz**
+(`/var/www/hub/node_modules`, **1.4 GB**). No hay `node_modules` dentro de `frontend/`.
+
+- 👉 **`npm ci` se corre en `/var/www/hub`, NO en cada paquete.** Correrlo dentro de `backend/` o
+  `frontend/` no reproduce el árbol y la app no arranca.
+- El `package-lock.json` autoritativo es el de la **raíz**.
+- `hub-frontend` arranca con `node_modules/next/dist/bin/next` **relativo a la raíz hoisted**.
+
+**📦 El artefacto a transferir es chico — 22 MB, no 500:**
+
+| Qué | Tamaño |
+|---|---|
+| `backend/dist` | 3,0 MB |
+| `frontend/.next` **sin `cache/`** | **19 MB** |
+| `frontend/public` | 120 KB |
+| ~~`frontend/.next/cache`~~ | ~~473 MB~~ — **caché de build, NO copiar** |
+| ~~`node_modules` (raíz)~~ | ~~1,4 GB~~ — se regenera con `npm ci` en drp |
+
+> `.next` pesa 491 MB en axioma, pero **473 son caché de compilación**. Excluir `cache/` baja la
+> transferencia de 491 MB a 19 MB. Es la diferencia entre minutos y segundos en un DR.
+
 **Particularidades:**
 - **Es la app de referencia**: fue la del drill de DRP y la de la remediación de julio (H13). Tiene el
   mejor estado de vulnerabilidades del parque (3 altas).
+- ⚠️ **`hub-frontend` escucha en `*:8089` (`0.0.0.0`), no en loopback** — verificado 2026-08-12. Es una de
+  las 5 apps Next de **H04**, bloqueada por el patrón `-H`/redirects. En drp queda tapado por ufw.
 - El [drill hub → axioma-drp](./drp-app-hub-drill.md) es el antecedente directo de este runbook: tiene
   detalle adicional útil, aunque **nunca se ejecutó**.
 - ⚠️ `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` en su `.env` son **peso muerto** (SDK nunca importado,
