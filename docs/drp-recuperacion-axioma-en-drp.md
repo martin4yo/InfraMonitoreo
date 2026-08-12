@@ -81,6 +81,37 @@ cada escalón y detenerse si la memoria aprieta:
 
 Después de cada app: `free -m` y verificación de la ficha. **Si el disponible baja de 300 MB, parar.**
 
+### 0.4 ¿Esto afecta a axioma? — acoplamientos verificados
+
+**Ejecutar este runbook hasta la Fase 7 NO afecta a axioma.** Verificado el 2026-08-12:
+
+| Por qué es independiente | Evidencia |
+|---|---|
+| drp restaura **desde R2**, no desde dev-1 | Su `pgbackrest.conf` no tiene `repo1-host`; el repo es S3/R2 directo |
+| `restore` es **solo lectura** sobre el repositorio | No escribe backups, no altera la stanza |
+| 🔴 **drp no archiva WAL** | `archive_mode = off` y `archive_command = (disabled)` |
+| El procedimiento ya está probado | Los restore drills mensuales corren así desde 2026-05 sin afectar producción |
+
+> **El punto crítico es el tercero.** Si el cluster restaurado arrancara con el `archive_command` heredado
+> de axioma, empezaría a empujar WAL **a la misma stanza** y contaminaría la línea temporal de los backups
+> productivos. Está desactivado en drp, pero **verificarlo antes de cada simulacro** es obligatorio:
+> ```bash
+> sudo -u postgres psql -tAc "show archive_mode"   # DEBE decir: off
+> ```
+
+**Las tres cosas que SÍ acoplan con producción — no hacerlas en un simulacro:**
+
+1. 🔴 **`pgbackrest expire` o `backup` desde drp.** Escriben en el repositorio **compartido** con
+   producción. El propio `pgbackrest.conf` de drp lo advierte. Desde drp: solo `restore` e `info`.
+2. 🔴 **Fase 8 (DNS).** Es el único paso que redirige tráfico real. En un simulacro **no se toca**.
+3. 🟡 **Fase 7 con dominios reales.** Let's Encrypt limita a **5 emisiones por dominio por semana**, y ese
+   contador es **compartido con axioma**: emitir certificados de prueba desde drp puede dejar a axioma sin
+   poder renovar los suyos. En simulacro: `/etc/hosts` + certificado autofirmado, **nunca `certbot`
+   contra los dominios productivos**.
+
+**Lo que sí cambia en drp:** la Fase 2 pisa su PGDATA actual. Es invasivo **sobre drp**, reversible por el
+respaldo de §2.2, y deja las 11 bases de axioma aunque el simulacro pruebe una sola app.
+
 ---
 
 ## 1. Fase 1 — Preparar el stack base en drp
