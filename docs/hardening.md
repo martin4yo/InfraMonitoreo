@@ -294,10 +294,12 @@ Rearmado completo el **2026-08-11**, todo verificado en vivo:
 - ✅ **Password de root definida** (2026-08-11) para que `su -` funcione como en los otros 4 (root estaba en
   `L`/bloqueada desde el provisioning 2022, herencia de la imagen). Solo sirve por consola local: root
   sigue cerrado por SSH.
-- ✅ **Disco reampliado**: cadena LVM online otra vez (backup de tabla de particiones → `growpart /dev/sda 3`
-  → `pvresize` → `lvextend -l +100%FREE` → `resize2fs`, sin reboot). `/` pasó de **12 G a 51 G** (41 G libres),
-  VG sin espacio remanente. ⚠ Ojo: el disco quedó en **55 G**, no en los 64 G de julio — la reinstalación
-  también revirtió el tamaño del VPS. Backup en `/root/sda-parttable.bak-20260811-211657.sfdisk`.
+- ✅ **Disco reampliado, en dos pasadas** (misma cadena LVM online las dos veces: backup de tabla de
+  particiones → `growpart /dev/sda 3` → `pvresize` → `lvextend -l +100%FREE` → `resize2fs`, sin reboot).
+  Primero **12 G → 51 G** sobre el disco de 55 G que dejó la reinstalación (la reinstalación había revertido
+  también el tamaño del VPS, que en julio era de 64 G). Después se agrandó el VPS a **70 G** y se repitió la
+  cadena: **51 G → 66 G** (54 G libres). VG sin espacio remanente. Backups en
+  `/root/sda-parttable.bak-*.sfdisk`.
 - ✅ **ufw reinstalado y activo**: default deny incoming / allow outgoing, allow 22/80/443 (v4 y v6),
   `enabled` al boot. SSH verificado vivo después de habilitarlo.
 - ✅ **fail2ban arreglado** (mismo fallo que en julio: `Have not found any log file for sshd jail`, porque el
@@ -322,10 +324,52 @@ Rearmado completo el **2026-08-11**, todo verificado en vivo:
 **Pendientes**: colectores específicos de Netdata (postgres/nginx/pgBackRest) — se suman con
 `scripts/20-deploy-configs.sh` cuando haya apps para cada prueba de restore. `ubuntu` NOPASSWD del cloud-init.
 
-**Gap de gobierno abierto (2026-08-11)**: no hay ningún control que detecte que este server volvió a fábrica.
-Se enteró por casualidad, 3 días después. Netdata Cloud habría mostrado el nodo caído — conviene una alarma de
-nodo ausente, y/o incluir a axioma-drp en la revisión periódica de G6 con verificación de que ufw/fail2ban/SSH
-siguen homologados. Mientras el rearmado sea manual, esto se repite en la próxima reinstalación.
+**Gap de gobierno — CERRADO el 2026-08-11 con el watchdog** (ver §12). El problema de fondo sigue vivo: el
+rearmado es manual, así que una próxima reinstalación vuelve a borrar todo. Lo que cambia es que ahora **se
+detecta en 15 minutos en vez de 3 días**.
+
+## 12. Watchdog de flota — detección de reinstalaciones y de controles caídos
+
+Motivado por la reinstalación de axioma-drp del 2026-08-08, que pasó 3 días sin que nadie la notara.
+Desplegado y **validado end-to-end** el 2026-08-11 con `scripts/35-deploy-watchdog.sh`. Dos piezas:
+
+### 12.1 Watchdog externo (en dev-1) — `hostkey-watchdog.py`
+
+Cron cada 15 min. Mira los 5 servers **desde afuera** con `ssh-keyscan`, que **no autentica**: no hace falta
+ninguna llave ni usuario del watchdog en los servers vigilados, así que no abre ninguna vía de acceso nueva.
+
+**La idea central**: la alarma de "nodo unreachable" de Netdata Cloud **no sirve** para esto — un server
+reinstalado vuelve a estar online enseguida y para Cloud simplemente "volvió". Lo que no vuelve igual es la
+**host key de SSH**: una instalación nueva genera claves nuevas. Comparar la huella contra una línea de base
+detecta la reinstalación aunque el server esté perfectamente vivo.
+
+- Línea de base: `/etc/watchdog/baseline.json` en dev-1, sembrada desde los servers vivos por el script de
+  despliegue. Las IPs no viven en el repo (salen de `inventory.sh`, gitignoreado).
+- Métricas `watchdog.fleet.*` → charts `watchdog_fleet.*` vía statsd.
+- Alarmas: **`watchdog_hostkey_changed`** (crítica, sin warning: una host key que cambia es un hecho, no una
+  degradación) y **`watchdog_server_ausente`** (warn <5 servers, crit <4, con 15 min de gracia por reboots).
+- Un server que no responde reporta `desconocido`, **no** `CAMBIÓ` — si no, cada corte de red sería una
+  falsa alarma de reinstalación.
+- **Tras una reinstalación legítima**: `hostkey-watchdog.py --reseed <server>` en dev-1, y asentarlo acá.
+  Nunca re-sembrar sin confirmar por un canal independiente que la reinstalación era esperada.
+
+### 12.2 Auto-chequeo local (hoy solo en axioma-drp) — `hardening-selfcheck.sh`
+
+Cron cada 15 min, como root. Mira hacia adentro y empuja a su propio Netdata: `ufw` activo, `fail2ban`
+activo **y con el jail sshd realmente levantado** (chequear solo el servicio no alcanza: es exactamente el
+modo en que estuvo roto en julio y de nuevo tras la reinstalación), `sshd -T` con `PasswordAuthentication no`
+y `PermitRootLogin no` (config **efectiva**, no los archivos: un drop-in puede existir sin estar aplicado), y
+el agente Netdata claimed+online. Cinco alarmas, una por control, para que el mensaje diga qué se cayó.
+
+**Límite conocido**: si el server se reinstala, esta pieza desaparece con él. Por eso el control de "server
+ausente" es el de dev-1, no éste. Se despliega solo donde el estado esperado está verificado — sumarlo a un
+server sin auditarlo primero arranca las alarmas en rojo y se vuelve ruido que se ignora.
+
+### 12.3 Validación
+
+`watchdog_hostkey_changed` se probó end-to-end simulando una reinstalación (huella falsa en una línea de base
+de `/tmp`, sin tocar la real): pasó a **CRITICAL en 20 segundos**. Las 7 alarmas quedaron en CLEAR con la
+línea de base real. Una alarma que nunca se vio disparar no es un control.
 
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.

@@ -155,6 +155,7 @@ caso de **dev-1** por ser el repo host de todos los backups. A resolver en la pr
 | Usuarios de provisioning/terceros bloqueados (`linuxadmin` en axioma-drp) | ⚠ **re-verificar cada vez** — la reinstalación del SO de axioma-drp (2026-08-08) revirtió la mitigación y **reintrodujo la llave ajena desde la imagen del proveedor**. Re-cerrado 2026-08-11 | H10 |
 | `pg_hba` a loopback + `scram-sha-256`, 0 hashes `md5` | ✅ | H01 (cerrado 2026-07-22) |
 | Apps bajo usuario dedicado | ⚠ **parcial** — desvíos abiertos: `mediflow-backend` (dev-1) corre como **root**; `checkpoint-web` como `axiomacloud`; `axio-ml` como `axiomacloud` (R04) | H04 / H11 |
+| **Detección de reinstalación de un server** (host key SSH vs. línea de base) | ✅ **automatizado 2026-08-11** — watchdog en dev-1, cron cada 15 min, alarma crítica validada end-to-end (dispara en 20s). Cubre los 5 servers. **Deja de ser una verificación manual de cadencia**: pasa a control continuo, como C8 | [hardening §12](../hardening.md) |
 
 | Fecha | Ejecutor | Alcance | Hallazgos | Resultado |
 |---|---|---|---|---|
