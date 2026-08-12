@@ -85,37 +85,43 @@ Después de cada app: `free -m` y verificación de la ficha. **Si el disponible 
 
 ## 1. Fase 1 — Preparar el stack base en drp
 
-> ⏱ Estimado: 30–45 min · Se puede (y conviene) hacer **antes** del desastre.
+> ✅ **EJECUTADA el 2026-08-12** — 25 min reales. Se hizo con axioma vivo, que es como corresponde:
+> esta fase no debe esperar al incidente.
 
-- [ ] **1.1** Confirmar acceso: `ssh axiomacloud@170.78.75.249` con `sudo -n true` OK.
+- [x] **1.1** Confirmar acceso: `ssh axiomacloud@170.78.75.249` con `sudo -n true` OK. ✅
 - [x] **1.2** ~~Ampliar la RAM a 4 GB desde el panel del proveedor~~ — ✅ **hecho el 2026-08-12**: 3911 MB + 4 GB swap.
-- [ ] **1.3** Instalar Node 20 (misma major que axioma: **v20.20.2**):
+- [x] **1.3** ✅ Instalado **v20.20.2 / npm 10.8.2** — *idéntico a axioma*, que es lo que garantiza que los binarios nativos de `npm ci` sean compatibles:
   ```bash
   curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
   sudo apt-get install -y nodejs
   node -v    # debe decir v20.x
   ```
-- [ ] **1.4** Instalar PM2 global y nginx + certbot:
+- [x] **1.4** ✅ Instalados **PM2 6.0.14** (axioma: 6.0.13), **nginx 1.18.0** y **certbot 1.21.0** — mismas versiones:
   ```bash
   sudo npm install -g pm2@6
   sudo apt-get install -y nginx certbot python3-certbot-nginx
   ```
-- [ ] **1.5** Abrir puertos en ufw (drp ya tiene ufw activo con 6 reglas):
+- [x] **1.5** ✅ **Ya estaban abiertos** — drp venía con 22/80/443 en ufw desde su reinstalación del 08-08:
   ```bash
   sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw status
   ```
-- [ ] **1.6** Crear los usuarios de aplicación **con los mismos nombres** que en axioma. Los UID no
-      necesitan coincidir, pero **los nombres sí** (los `.env`, rutas y unidades systemd los referencian):
+- [x] **1.6** ✅ **7 de 7 creados** el 2026-08-12, con home propio y `mediflowapp` en el grupo `www-data`
+      como en axioma. Los UID **no** coinciden con los de axioma (drp: 992–998) y **no importa**: lo que
+      referencian los `.env`, las rutas y las unidades systemd son los **nombres**.
   ```bash
   for u in mediflowapp hubapp parseapp miniapp eloreapp evolutionapp axioapp; do
     sudo useradd -r -m -s /bin/bash "$u" 2>/dev/null || echo "$u ya existe"
   done
   ```
-- [ ] **1.7** Verificar que `pgbackrest` ve la stanza:
+- [x] **1.7** ✅ Verificado — drp ve las **4 stanzas**:
   ```bash
   sudo -u postgres pgbackrest info --stanza=AxiomaCloudProd
   ```
   ✅ *Ya verificado el 2026-08-11: drp ve las 4 stanzas.*
+
+> **Estado tras la Fase 1 (2026-08-12):** drp quedó con **416 MB usados y 3236 MB disponibles**, con
+> nginx, PostgreSQL y ufw activos. El stack base está listo: a partir de acá, un DR real arranca
+> directamente en la Fase 2 y se ahorra estos 25 minutos.
 
 ---
 
