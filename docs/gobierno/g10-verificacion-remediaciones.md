@@ -31,9 +31,10 @@ Aplica al cierre de:
 No aplica a cambios que no cierran un hallazgo (mejoras, refactors, despliegues rutinarios), aunque las
 reglas de §2 son buena práctica igual.
 
-## 2. Las siete reglas de verificación
+## 2. Las ocho reglas de verificación
 
 Cada una nació de un error real. Se listan con su origen para que no se relajen por comodidad.
+**R8 se agregó el 2026-08-12**, y nació de un error *nuestro*: una prueba que creíamos diagnóstica y no lo era.
 
 ### R1 — Verificar contra el **próximo arranque**, no contra el proceso vivo
 
@@ -112,6 +113,22 @@ Editar el archivo de configuración correcto no significa que el servicio lo est
 > seguía en `no`. Se creyó habilitado algo que no lo estaba — y el archivo quedó armado para activarse
 > solo en el próximo reboot.*
 
+### R8 — Probar la accesibilidad **desde donde está el usuario**, no desde el servidor
+
+Un servicio expuesto a internet solo se verifica **desde fuera de la red del proveedor**. Las pruebas
+hechas desde el propio servidor —o desde otra máquina del mismo proveedor— pueden dar resultados
+engañosos en **ambas direcciones**.
+
+- **DEBE** verificarse desde una red externa: `curl` a la **IP o dominio público**, no a `127.0.0.1`.
+- ⚠️ **`curl` desde el servidor a su propia IP pública NO es una prueba válida.** Muchos proveedores no
+  implementan **NAT hairpinning**, así que devuelve `000` **tanto si el puerto está cerrado como si está
+  abierto**. Es un falso negativo garantizado.
+
+> *Origen: R21 (2026-08-12). El diagnóstico del bloqueo incluyó esa prueba como evidencia. Cuando baehost
+> habilitó los puertos y el servicio pasó a responder por internet, **la misma prueba siguió devolviendo
+> `000`** — revelando que nunca había medido lo que se creía. El hallazgo era correcto, pero por una de
+> las tres pruebas, no por las tres.*
+
 ## 3. Checklist de cierre
 
 Un hallazgo **NO DEBE** marcarse cerrado sin completar esta checklist. Se adjunta al registro del hallazgo.
@@ -130,6 +147,8 @@ Ejecutor          : ____________________          Revisor (si aplica): _________
 [ ] R5  Evidencia obtenida del sistema en vivo, no de documentación
 [ ] R6  Si hay respaldo involucrado: verificado DESDE el respaldo
 [ ] R7  Estado efectivo del servicio confirmado (no solo el archivo)
+[ ] R8  Si el servicio es público: verificado DESDE FUERA de la red del proveedor
+        (nunca desde el servidor a su propia IP pública — hairpinning)
 [ ] Rollback disponible y probado, o justificación de por qué no aplica
 [ ] Residuos barridos (backups temporales, .bak, logs con el valor viejo) — 0 ocurrencias
 [ ] Documentación actualizada: dossier + documento técnico + registro de riesgos
