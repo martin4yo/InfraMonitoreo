@@ -436,9 +436,12 @@ de red aparte del del sistema operativo. Riesgo **R21** en
       `sudo -u <appuser> pm2 restart <name> && sleep 10 && sudo -u <appuser> pm2 list`
 - [ ] **9.2** **Cobertura total (R2).** Las 11 bases presentes y **cada app de la ficha** verificada. Anotar
       el conteo explícito, no "verificado".
-- [ ] **9.3** 🔴 **Legibilidad de datos cifrados (BC-B).** En mediflow, abrir un registro que use campos
-      cifrados y confirmar que **se lee en claro**. Si sale ilegible, falta la `ENCRYPTION_MASTER_KEY`
-      correcta: la recuperación **no está completa** aunque todo lo demás funcione.
+- [x] **9.3** ✅ **EJECUTADA el 2026-08-12 — legibilidad de datos cifrados CONFIRMADA.** Se abrió una
+      ficha en alvera recuperada y **los campos cifrados se leen en claro**. Es la prueba de que la
+      `ENCRYPTION_MASTER_KEY` restaurada es la correcta y de que el circuito **backup → restore →
+      aplicación** funciona de verdad. Era el único escenario donde un DR podía fallar en silencio:
+      base restaurada, app corriendo, datos ilegibles y **ningún error en ningún log**.
+      **Sigue siendo obligatoria en cada recuperación de mediflow** — no se hereda de esta corrida.
 - [ ] **9.4** **Contenido, no solo código (R4).** En los dominios con redirect, revisar el header
       `Location`: debe apuntar al dominio público, **no a `localhost`**. Es el patrón de H04.
   ```bash
