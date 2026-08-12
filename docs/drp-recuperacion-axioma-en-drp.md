@@ -40,6 +40,7 @@ En una catástrofe **axioma no existe**. Todo lo necesario tiene que venir de ot
 |---|---|---|
 | **Datos** | backup en **R2** (pgBackRest) | ❌ No |
 | **Código** | **repositorio git** de cada app | ❌ No |
+| **Config de PM2** | 🔴 **[`config/axioma/pm2/`](../config/axioma/)** — ⚠️ **NO el `ecosystem.config.js` del repo**, que difiere de producción (ver ficha de alvera) | ❌ No |
 | **Configuración** (`.env`) | **`infra-secrets`** (SOPS) | ❌ No |
 | **Artefactos compilados** | pre-compilados en R2 (§10.1) o compilados desde el repo | ❌ No |
 | Puertos, vhosts, `ecosystem.config.js`, unidades systemd | ✅ **[`config/axioma/`](../config/axioma/)** *(versionado el 2026-08-12)* | ❌ No |
@@ -62,6 +63,12 @@ otras apps ya corriendo. La separación que lo resuelve:
 **El paso que come memoria es portable; el que depende de la plataforma es liviano.** Por eso:
 
 > **Se compila afuera y se instala en drp.**
+>
+> ⚠️ **MATIZADO CON MEDICIÓN REAL (2026-08-12).** Se compiló el frontend de alvera **en drp**, con hub ya
+> corriendo: **33 segundos, y el mínimo de memoria disponible fue 1598 MB** de 3911. El pico consumió
+> ~1,2 GB. **La regla se relaja a: «compilar en drp es viable, de a UNA app por vez y midiendo».** Sigue
+> siendo preferible el artefacto pre-compilado —es 33 s contra minutos, por app— pero **compilar en drp
+> ya no es un bloqueante**, que es lo que este documento suponía antes de medirlo.
 
 ⚠️ **Y "afuera" no significa tu notebook.** El equipo de trabajo corre **Linux Mint 22.3 con glibc 2.39**;
 los servidores usan **glibc 2.35**. glibc es compatible hacia atrás, **no hacia adelante**: un binario

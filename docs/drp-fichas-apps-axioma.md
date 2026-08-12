@@ -55,6 +55,63 @@ son **permanentemente ilegibles** y ningún backup lo resuelve.
 > **La verificación de §9.3 del runbook no es opcional para esta app.** Es la única que distingue una
 > recuperación exitosa de una que *parece* exitosa. Riesgo **R15**.
 
+### ✅ SIMULACRO EJECUTADO — 2026-08-12
+
+**alvera levantó en axioma-drp y quedó accesible**, con hub corriendo en paralelo.
+`SPA → 200` con `<title>Alvera - Sistema de Gestión Médica</title>`, `API → 401` (auth operativa),
+**73 tablas · 4 tenants · 5 pacientes · 3212 audit_logs**. Estado final: 902 MB usados, **2686 MB libres**.
+
+**Código traído desde el repositorio de GitHub**, no desde axioma — el camino que funciona con axioma muerto.
+
+#### 🔴 EL HALLAZGO MÁS IMPORTANTE: el repo NO tiene la configuración de producción
+
+El `ecosystem.config.js` **versionado en GitHub difiere del que corre en axioma**:
+
+| | Repo (GitHub) | axioma (producción) |
+|---|---|---|
+| `NODE_ENV` | **`development`** | `production` |
+| `PORT` | **`5000`** | `5300` |
+| `node_args` | *(ausente)* | `--max-old-space-size=192` |
+
+**Desplegar siguiendo el runbook "clonar del repo" levanta la app en modo development, en el puerto
+equivocado y escuchando en `*:5000`** (todas las interfaces). La app *parece* funcionar —responde,
+autentica— y por eso el error pasa desapercibido: no falla, funciona **mal**.
+
+> 👉 **Por eso [`config/axioma/`](../config/axioma/) no es opcional.** Es la única copia fiel de la
+> configuración productiva. En el simulacro, aplicar ese archivo corrigió el arranque de inmediato.
+> **Regla: el código sale del repo, la configuración de PM2 sale de `config/axioma/`.**
+
+#### Otros hallazgos
+
+- ✅ **`npm ci` genera el cliente Prisma solo** — el `package.json` tiene
+  `postinstall: npm run build → prisma:generate`. **Distinto de hub**, donde hay que correrlo a mano desde
+  `backend/`. Dos apps del mismo parque, dos comportamientos: es el argumento para tener fichas separadas.
+- 📊 **Build medido en drp: 33 s, y el mínimo de memoria disponible fue 1598 MB** (con hub corriendo).
+  El pico consumió ~1,2 GB de los 3,9 GB. **La "regla de oro" del runbook se relaja** — ver §0.2.
+- El `.env` de producción conecta por **pgbouncer `:6432`**, que no existe en drp → se ajustó a `:5432`
+  quitando `?pgbouncer=true`. Es el desvío previsto en §3.4 del runbook.
+- Con `NODE_ENV=production` la app **fuerza redirect a HTTPS** (301). Correcto: nginx termina TLS y hay
+  que pasarle `X-Forwarded-Proto: https`, o todo responde 301 en bucle.
+- Bindea a **`*:5300`**, no a loopback, pese a `HOST=127.0.0.1` en el `.env`. Es el mismo patrón de
+  **H04** y **también ocurre en axioma** — no es un artefacto del simulacro.
+
+#### ⚠️ La verificación 9.3 quedó a medias, y hay que decirlo
+
+Se confirmó que los datos están (5 pacientes, 4 tenants) y que la app arranca y autentica. **No se
+verificó que los campos cifrados se lean en claro**, porque eso exige un login funcional con credenciales
+reales. **Sigue siendo la única verificación que distingue una recuperación exitosa de una que lo
+parece.** Pendiente de ejecución humana sobre el entorno ya montado.
+
+#### Nota de clasificación
+
+El responsable confirmó que **alvera no está productiva con tenants reales**: está en un servidor de
+producción pero en testing. Eso responde la acción **A1 de [G8](./gobierno/g8-clasificacion-datos.md)** y
+baja de facto la clasificación 🔴 *(a confirmar)*. ⚠️ Con una salvedad: *"en testing"* no garantiza cero
+datos reales — si alguna vez se cargó un dump, vuelve a subir. **Los 5 pacientes y 3212 `audit_logs`
+merecen una mirada antes de cerrar A1.**
+
+Por decisión del responsable, **`mediflow_db` queda en drp** (sigue en testing).
+
 **Otras particularidades:**
 - Es la **única base 🔴 Sensible** del marco (datos de salud, art. 7 Ley 25.326) → cualquier incidente
   durante el DR puede tener obligación de notificación ([G5 §5](./gobierno/g5-respuesta-incidentes.md)).
