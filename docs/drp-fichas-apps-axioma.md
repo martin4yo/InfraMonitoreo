@@ -75,7 +75,8 @@ son **permanentemente ilegibles** y ningún backup lo resuelve.
 | **Dominios** | `hub.axiomacloud.com`, `api.hub.axiomacloud.com` |
 | **PM2** | `hub-backend` (`dist/server.js`) y `hub-frontend` (`next start -p 8089`) |
 | **Logs** | `/var/log/hub/` — **crear el directorio antes de arrancar** |
-| **RAM medida** | 217 MB + 61 MB daemon |
+| **RAM medida** | 217 MB + 61 MB daemon (en drp arrancó con 30 + 36 MB) |
+| **Prisma** | ✅ **SÍ** — corregido 2026-08-12 |
 
 **🔴 Es un MONOREPO con npm workspaces** *(verificado 2026-08-12)*. `package.json` declara
 `workspaces: ['backend','frontend','shared']` y el `node_modules` está **hoisted en la raíz**
@@ -98,6 +99,39 @@ son **permanentemente ilegibles** y ningún backup lo resuelve.
 
 > `.next` pesa 491 MB en axioma, pero **473 son caché de compilación**. Excluir `cache/` baja la
 > transferencia de 491 MB a 19 MB. Es la diferencia entre minutos y segundos en un DR.
+
+### ✅ SIMULACRO EJECUTADO — 2026-08-12
+
+**hub levantó en axioma-drp y quedó accesible.** `frontend → 200` con `<title>Axioma - Hub</title>`,
+`backend /health → 200` con `{"status":"ok"}`, **87 tablas** restauradas, 700 MB usados de 3911.
+Sin tocar producción: datos desde R2, configuración desde `infra-secrets`.
+
+**Los cuatro tropiezos, en orden de aparición:**
+
+1. 🔴 **`locale-gen en_US.UTF-8` faltaba en drp** → el cluster restaurado no arranca. Bloqueante total,
+   y el `pgbackrest restore` dice *"completed successfully"* igual. Ahora es el paso **1.8** del runbook.
+2. 🔴 **hub usa Prisma** — esta ficha decía que no. El escaneo buscó `.prisma` en `backend/node_modules`,
+   pero por el **hoisting del monorepo** vive en `/var/www/hub/node_modules/.prisma`.
+3. 🔴 **`npx prisma generate` se corre desde `backend/`, NO desde la raíz.** El `prisma.config.ts` está en
+   la raíz pero declara `schema: "prisma/schema.prisma"` **relativo al cwd**, y el schema real está en
+   `backend/prisma/`. Desde la raíz falla con *"Could not load schema"*.
+4. 🟡 **Tras `systemctl reload nginx`, el primer request lo atiende el worker viejo** y devuelve la página
+   por defecto. Ya estaba documentado en [`nginx-anti-scanner.md`](../nginx-anti-scanner.md); volvió a
+   morder. **Re-testear a los pocos segundos.**
+
+### 🔴 Inconsistencias de PRODUCCIÓN que el simulacro destapó
+
+Estas no son del DR: existen hoy en axioma y el ejercicio las hizo visibles.
+
+- **El `.env` tiene un comentario pegado al valor**, sin salto de línea:
+  `JWT_SECRET=<valor>== # AWS S3 (configurar cuando sea necesario)`.
+  Node lo tolera, pero cualquier parser más estricto —o un `source` de shell— se lleva el comentario
+  **dentro del secreto**. Fragilidad latente: si un entorno lo parsea distinto, los JWT dejan de validar.
+- **15 archivos que no son código en la raíz de la app**, con datos de terceros identificados: facturas
+  (`Factura Mc Joselevich`, `factura_maria_joselevich.html`, un PDF cuyo nombre es un **CUIT**),
+  propuestas comerciales (`Ferracioli-…`, `PENDIENTES_UDESA.md`) y capturas. **9 están versionadas en
+  git.** No son accesibles por web (nginx hace `proxy_pass`, no sirve el directorio), pero es material
+  para [G8](./gobierno/g8-clasificacion-datos.md).
 
 **Particularidades:**
 - **Es la app de referencia**: fue la del drill de DRP y la de la remediación de julio (H13). Tiene el

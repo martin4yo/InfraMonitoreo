@@ -32,6 +32,23 @@
 | Node / PM2 / nginx / certbot / pgbouncer | ✅ | ❌ **nada instalado** | Fase 1 los instala |
 | Ubuntu / glibc | 22.04 / 2.35 | 22.04 / **2.35** | ✅ **Binarios compatibles entre sí** |
 
+### 0.1.1 🔴 De dónde sale cada cosa — el runbook NO puede depender de axioma
+
+En una catástrofe **axioma no existe**. Todo lo necesario tiene que venir de otro lado:
+
+| Qué | De dónde | ¿Depende de axioma? |
+|---|---|---|
+| **Datos** | backup en **R2** (pgBackRest) | ❌ No |
+| **Código** | **repositorio git** de cada app | ❌ No |
+| **Configuración** (`.env`) | **`infra-secrets`** (SOPS) | ❌ No |
+| **Artefactos compilados** | pre-compilados en R2 (§10.1) o compilados desde el repo | ❌ No |
+| Puertos, vhosts, `ecosystem.config.js` | 🔴 **hoy solo viven en axioma** | ⚠️ **SÍ — ver abajo** |
+
+> 🔴 **Hueco identificado el 2026-08-12.** Los **vhosts de nginx**, los **`ecosystem.config.js`** y las
+> **unidades systemd** existen **únicamente en axioma**. No están en ningún repositorio. Si axioma muere,
+> se pierden con él y hay que reconstruirlos de memoria. Las [fichas](./drp-fichas-apps-axioma.md) los
+> documentan parcialmente, pero **la copia fiel debe versionarse**. Acción pendiente en §10.
+
 ### 0.2 🔴 Regla de oro: **no se compila en drp**
 
 Con 4 GB, `next build` de una sola aplicación (1–2 GB de pico) puede tumbar el servidor con PostgreSQL y
@@ -116,7 +133,7 @@ respaldo de §2.2, y deja las 11 bases de axioma aunque el simulacro pruebe una 
 
 ## 1. Fase 1 — Preparar el stack base en drp
 
-> ✅ **EJECUTADA el 2026-08-12** — 25 min reales. Se hizo con axioma vivo, que es como corresponde:
+> ✅ **EJECUTADA el 2026-08-12** — 25 min reales + el paso 1.8, descubierto al ejecutar la Fase 2. Se hizo con axioma vivo, que es como corresponde:
 > esta fase no debe esperar al incidente.
 
 - [x] **1.1** Confirmar acceso: `ssh axiomacloud@170.78.75.249` con `sudo -n true` OK. ✅
@@ -144,6 +161,22 @@ respaldo de §2.2, y deja las 11 bases de axioma aunque el simulacro pruebe una 
     sudo useradd -r -m -s /bin/bash "$u" 2>/dev/null || echo "$u ya existe"
   done
   ```
+- [x] **1.8** 🔴 **Generar el locale `en_US.UTF-8`** — *paso descubierto ejecutando, el 2026-08-12*:
+  ```bash
+  sudo locale-gen en_US.UTF-8 && sudo update-locale
+  ```
+  ⚠️ **Sin esto el cluster restaurado NO ARRANCA.** El cluster de axioma se inicializó con
+  `LC_COLLATE = en_US.UTF-8`; drp, reinstalado el 08-08, traía solo `C`, `C.utf8` y `POSIX`. PostgreSQL
+  falla al arrancar con:
+  ```
+  FATAL: database locale is incompatible with operating system
+  DETAIL: The database was initialized with LC_COLLATE "en_US.UTF-8",
+          which is not recognized by setlocale()
+  ```
+  **Es un bloqueante total del DR** y no aparece en ningún inventario de paquetes ni de configuración:
+  el `pgbackrest restore` termina *"completed successfully"* y el fallo recién se ve al arrancar. Un
+  documento escrito sin ejecutar nunca lo hubiera detectado.
+
 - [x] **1.7** ✅ Verificado — drp ve las **4 stanzas**:
   ```bash
   sudo -u postgres pgbackrest info --stanza=AxiomaCloudProd
@@ -380,6 +413,9 @@ Por cada `<app>`, según su ficha:
 - [ ] **10.4** **Acceso a Cloudflare (K8) documentado y compartido.** Sin DNS no hay servicio.
 - [ ] **10.5** **Deploy keys de GitHub** disponibles para el BT, o una copia del código fuera de los servers.
 - [ ] **10.6** **TTL bajo** en los registros DNS críticos.
+- [ ] **10.8** 🔴 **Versionar la configuración que solo vive en axioma**: vhosts de nginx,
+      `ecosystem.config.js` de cada app y unidades systemd. Hoy no están en ningún repo — si axioma
+      muere, se reconstruyen de memoria. *(Identificado en el simulacro del 2026-08-12.)*
 - [ ] **10.7** **Ejecutar este runbook como simulacro, una app por vez.** Es lo que convierte este
       documento de hipótesis en procedimiento. Empezar por la ficha más simple, no por mediflow.
 
