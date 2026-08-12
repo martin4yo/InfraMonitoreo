@@ -18,6 +18,7 @@ DRP_HOST="${DRP_HOST:-170.78.75.249}"
 DRP_USER="${DRP_USER:-axiomacloud}"
 DRP_PORT="${DRP_PORT:-22}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
+LOCAL_PORT_TLS="${LOCAL_PORT_TLS:-8443}"
 APPS=(hub-drill.local alvera-drill.local)
 
 C_OK=$'\e[32m'; C_WARN=$'\e[33m'; C_ERR=$'\e[31m'; C_DIM=$'\e[2m'; C_0=$'\e[0m'
@@ -27,6 +28,7 @@ err(){ echo "${C_ERR}✘${C_0} $*" >&2; }
 info(){ echo "${C_DIM}·${C_0} $*"; }
 
 PATTERN="${LOCAL_PORT}:127.0.0.1:80"
+PATTERN_TLS="${LOCAL_PORT_TLS}:127.0.0.1:443"
 
 tunnel_pid(){ pgrep -f "ssh.*-L *${PATTERN}.*${DRP_HOST}" 2>/dev/null | head -1; }
 
@@ -65,7 +67,7 @@ else
     info "Levantando túnel ${LOCAL_PORT} → ${DRP_HOST}:80 …"
     if ! ssh -f -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
              -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
-             -L "${PATTERN}" -p "${DRP_PORT}" "${DRP_USER}@${DRP_HOST}"; then
+             -L "${PATTERN}" -L "${PATTERN_TLS}" -p "${DRP_PORT}" "${DRP_USER}@${DRP_HOST}"; then
         err "No se pudo abrir el túnel."
         err "Verificá el acceso:  ssh -p ${DRP_PORT} ${DRP_USER}@${DRP_HOST}"
         exit 1
@@ -79,12 +81,17 @@ echo
 echo "Aplicaciones recuperadas en axioma-drp:"
 fallos=0
 for app in "${APPS[@]}"; do
-    code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${app}" \
-           "http://127.0.0.1:${LOCAL_PORT}/" --max-time 15 2>/dev/null)
-    title=$(curl -s -H "Host: ${app}" "http://127.0.0.1:${LOCAL_PORT}/" --max-time 15 2>/dev/null \
+    # alvera exige HTTPS: su cookie de sesion sale con flag Secure (NODE_ENV=production)
+    if [[ "$app" == alvera-* ]]; then
+        url="https://127.0.0.1:${LOCAL_PORT_TLS}/"; flags="-sk"; puerto="${LOCAL_PORT_TLS}"; esquema="https"
+    else
+        url="http://127.0.0.1:${LOCAL_PORT}/";      flags="-s";  puerto="${LOCAL_PORT}";     esquema="http"
+    fi
+    code=$(curl $flags -o /dev/null -w '%{http_code}' -H "Host: ${app}" "$url" --max-time 15 2>/dev/null)
+    title=$(curl $flags -H "Host: ${app}" "$url" --max-time 15 2>/dev/null \
             | grep -oE '<title>[^<]*</title>' | sed 's/<[^>]*>//g')
     if [[ "$code" == "200" ]]; then
-        printf "  ${C_OK}%s${C_0}  %-22s ${C_DIM}%s${C_0}\n" "200" "$app" "${title:-—}"
+        printf "  ${C_OK}%s${C_0}  %-22s ${C_DIM}%s${C_0}\n" "200" "${esquema}://${app}:${puerto}" "${title:-—}"
     else
         printf "  ${C_ERR}%s${C_0}  %-22s ${C_DIM}(sin respuesta)${C_0}\n" "${code:-000}" "$app"
         fallos=$((fallos+1))
@@ -102,7 +109,11 @@ else
     ok "/etc/hosts ya tiene las entradas"
 fi
 echo "Abrí en el navegador:"
-for app in "${APPS[@]}"; do echo "    http://${app}:${LOCAL_PORT}"; done
+echo "    http://hub-drill.local:${LOCAL_PORT}"
+echo "    https://alvera-drill.local:${LOCAL_PORT_TLS}   ${C_DIM}(certificado autofirmado: el navegador va a advertir)${C_0}"
+echo
+info "alvera SOLO funciona por HTTPS: su cookie de sesion sale con flag Secure"
+info "y el navegador la descarta sobre http://. No es un fallo: es la app protegiendose."
 echo
 info "Para bajarlo:  $0 --stop"
 

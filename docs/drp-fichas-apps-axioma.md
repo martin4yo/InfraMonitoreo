@@ -95,12 +95,57 @@ autentica— y por eso el error pasa desapercibido: no falla, funciona **mal**.
 - Bindea a **`*:5300`**, no a loopback, pese a `HOST=127.0.0.1` en el `.env`. Es el mismo patrón de
   **H04** y **también ocurre en axioma** — no es un artefacto del simulacro.
 
-#### ⚠️ La verificación 9.3 quedó a medias, y hay que decirlo
+#### ✅ Login funcional verificado — el DR de alvera está completo
 
-Se confirmó que los datos están (5 pacientes, 4 tenants) y que la app arranca y autentica. **No se
-verificó que los campos cifrados se lean en claro**, porque eso exige un login funcional con credenciales
-reales. **Sigue siendo la única verificación que distingue una recuperación exitosa de una que lo
-parece.** Pendiente de ejecución humana sobre el entorno ya montado.
+**El 2026-08-12 se completó el circuito entero**: backup en R2 → base restaurada → backend → nginx →
+navegador → **login exitoso** (`POST /api/auth/login → 200`). 73 tablas, 21 usuarios activos.
+
+Llegar hasta el login destapó **tres capas** que las verificaciones de servidor no ven. Vale distinguirlas
+porque solo una es un problema real:
+
+| # | Síntoma en el navegador | Causa | ¿Problema real? |
+|---|---|---|---|
+| 1 | CORS a `http://localhost:5000/api/...` | **`VITE_API_URL` sin definir al compilar** | 🔴 **SÍ** |
+| 2 | `500` en `/api/auth/login` | El origen del ensayo no estaba en `ALLOWED_ORIGINS` | 🟢 No — artefacto |
+| 3 | `401` en `/api/auth/profile` tras un login 200 | Cookie con flag `Secure` descartada sobre `http://` | 🟢 No — la app protegiéndose |
+
+**🔴 (1) es el hallazgo: el build de producción del frontend NO es reproducible.**
+
+- El código usa `import.meta.env.VITE_API_URL`, con fallback hardcodeado a `http://localhost:5000/api`.
+- **No hay `.env` ni `.env.production` en el repo del frontend.**
+- **`infra-secrets` solo tiene `mediflow-backend.env`** — no existe `mediflow-frontend.env`.
+- ⇒ El valor con el que se compiló el `dist` que corre en axioma **existe únicamente en la shell de quien
+  lo compiló**. Si mañana hay que recompilar, nadie sabe con qué valor.
+- **Y el modo de falla es traicionero:** la app carga, se ve perfecta, y falla **recién en el login**.
+
+> **Acción: crear `mediflow-frontend.env` en `infra-secrets`** con el `VITE_API_URL` real de producción.
+> Es el equivalente, para el frontend, de lo que `config/axioma/pm2/` resolvió para el backend.
+
+**(2) y (3) no ocurrirían en un DR real**: con el DNS movido, el dominio sería
+`alvera.axiomacloud.com` —ya presente en `ALLOWED_ORIGINS`— y el certificado sería válido, así que la
+cookie `Secure` viajaría sin problema. Son fricción del ensayo, y quedan documentadas para que el próximo
+no pierda tiempo en lo mismo.
+
+**Bug menor de la app** (`websocketService.js:22`): `import.meta.env.VITE_API_URL?.replace('/api','')`
+devuelve cadena vacía si la URL es relativa, y como `''` es *falsy* cae al fallback `localhost:5000`.
+Rompe websockets con configuración relativa. No afecta el login.
+
+#### Para probar el ensayo hace falta HTTPS
+
+Se montó un **certificado autofirmado** en drp (`/etc/nginx/drill-certs/`) y el túnel expone el 443.
+**No se usó Let's Encrypt** — el límite de 5 emisiones por dominio y semana es compartido con axioma
+(§0.4). Firefox exige aceptar la excepción **también en un endpoint de la API**
+(`https://alvera-drill.local:8443/api/health`), no solo en la navegación: si no, las XHR fallan con un
+error engañoso que dice *"CORS falló, código (null)"* cuando en realidad no abrió la conexión.
+
+#### ⚠️ Lo único que queda de la 9.3
+
+
+
+Con el login ya funcionando, resta **abrir una ficha clínica y confirmar que los campos cifrados con
+`ENCRYPTION_MASTER_KEY` se leen en claro**. Es lo último que separa una recuperación exitosa de una que lo
+parece: si la clave no fuera la correcta, la app mostraría basura sin dar ningún error.
+**Pendiente de confirmación visual sobre el entorno ya montado y accesible.**
 
 #### Nota de clasificación
 
