@@ -78,8 +78,8 @@ documento*.
 
 | Proveedor | Qué provee | Si desaparece | SLA | Plan |
 |---|---|---|---|---|
-| **VPS (donweb/dattaweb)** | Los 5 servidores | 🔴 Caída total | ⚠ **Sin acuerdo formal** | §3.1 |
-| **VPS — filtrado de red** | 🔴 **Bloquea 80/443 hacia axioma-drp** (verificado 08-12) | 🔴 **El DR no puede completarse** | ⚠ Sin acuerdo | **R21** — solicitar habilitación. Es una dependencia que **no se puede respaldar ni mitigar desde el servidor** |
+| **VPS — donweb/dattaweb** | axioma, clubix, dev-1 *(y probablemente no axiodemo)* | 🔴 Caída de producción | ⚠ **Sin acuerdo formal** | §3.1 |
+| **VPS — baehost** *(axioma-drp)* | El **servidor de recuperación**. 🔴 **Filtra 80/443 entrantes** (verificado 08-12) | 🔴 **El DR no puede completarse** | ⚠ Sin acuerdo | **R21** — solicitar la habilitación **a baehost**. Es una dependencia que **no se puede respaldar ni mitigar desde el servidor** |
 | **Cloudflare R2** | Backups off-site (repo2) | 🟡 Queda repo1 en dev-1 | ⚠ Sin acuerdo | Dual-repo ya mitiga |
 | **Cloudflare DNS** | Resolución de todos los dominios | 🔴 **Servicio caído con servers sanos** | ⚠ Sin acuerdo | §3.2 |
 | **GitHub** | Código + secretos cifrados | 🟡 Código vive también en los servers | Términos estándar | Aceptable |
@@ -88,9 +88,29 @@ documento*.
 | **MercadoPago** | Cobros de clubix | 🔴 Sin cobros | Términos estándar | Del negocio, no de infra |
 | **Twilio / WhatsApp Business** | Notificaciones de hub | 🟢 Degradación | Términos estándar | Aceptable |
 
+### 3.0 ✅ La infraestructura NO está en un solo proveedor — y eso es una fortaleza
+
+**Corregido el 2026-08-12.** Este documento asumía un único proveedor de VPS. No es así:
+
+| Servidor | Proveedor | Evidencia |
+|---|---|---|
+| axioma, clubix, dev-1 | **donweb / dattaweb** | 43–44 llaves `@donweb.com` en `/root/.ssh/authorized_keys` de cada uno |
+| **axioma-drp** | **baehost** | **0 llaves de donweb**; confirmado por el responsable |
+| axiodemo | *(a confirmar)* | 0 llaves de donweb; IP en el mismo rango que drp |
+
+> **Es una propiedad de resiliencia que nadie había registrado**: el servidor de recuperación está en un
+> proveedor **distinto** del de producción. Una caída, un bloqueo administrativo o una disputa comercial
+> con donweb **no se lleva a axioma-drp**, y los backups de repo2 están en un tercero más (Cloudflare R2).
+> El escenario **BC-E** —pérdida de acceso al proveedor— está mucho mejor cubierto de lo que este documento
+> suponía.
+>
+> **La contracara:** son **dos relaciones contractuales** que gestionar, no una. R21 se le pide a
+> **baehost**; el contrato de tratamiento de datos (§3.1) se le pide a **donweb**, que es quien tiene
+> acceso a dev-1. Confundirlos hace perder tiempo pidiéndole a cada uno lo que le corresponde al otro.
+
 ### 3.1 El proveedor de hosting es también **encargado de tratamiento**
 
-No es solo un riesgo de disponibilidad. Como se verificó el 2026-08-09
+*(Aplica a **donweb/dattaweb**, proveedor de dev-1 — no a baehost.)* No es solo un riesgo de disponibilidad. Como se verificó el 2026-08-09
 ([G8 §4.2](./g8-clasificacion-datos.md)), el proveedor tiene **acceso administrativo efectivo a dev-1**,
 que aloja 16 copias de bases productivas incluida `mediflow_db`. Eso lo convierte, bajo la
 **Ley 25.326**, en **encargado de tratamiento de datos de salud**.

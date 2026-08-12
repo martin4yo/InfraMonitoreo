@@ -398,8 +398,9 @@ Por cada `<app>`, según su ficha:
   Si devuelve `000`, **detener el DR acá**: mover el DNS solo lograría apuntar los dominios a un servidor
   inalcanzable, y además hay que esperar la propagación para volver atrás.
 
-**Acción pendiente:** solicitar al proveedor la habilitación de 80/443 entrantes para `170.78.75.249`, o
-revisar si su panel tiene un firewall de red aparte del del sistema. Riesgo **R21** en
+**Acción pendiente:** solicitar a **baehost** —el proveedor de axioma-drp, que **no es el mismo** que el de
+axioma— la habilitación de 80/443 entrantes para `170.78.75.249`, o revisar si su panel tiene un firewall
+de red aparte del del sistema operativo. Riesgo **R21** en
 [G3](./gobierno/g3-registro-riesgos.md).
 
 **Mitigación provisional — túnel SSH** (sirve para verificar, **no** para dar servicio):

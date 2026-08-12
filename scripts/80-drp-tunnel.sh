@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Túnel SSH para acceder a las aplicaciones recuperadas en axioma-drp.
 #
-# POR QUÉ HACE FALTA: el proveedor filtra los puertos 80/443 entrantes hacia
+# POR QUÉ HACE FALTA: baehost (proveedor de axioma-drp) filtra los puertos 80/443 hacia
 # axioma-drp (verificado 2026-08-12 — ver R21 en G3 y §8.1 del runbook de
 # recuperación). El servidor está bien configurado —nginx en 0.0.0.0:80 e
 # iptables con ACCEPT— pero el paquete no llega. Hasta que el proveedor los
