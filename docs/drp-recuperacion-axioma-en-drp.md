@@ -41,6 +41,7 @@ En una catástrofe **axioma no existe**. Todo lo necesario tiene que venir de ot
 | **Datos** | backup en **R2** (pgBackRest) | ❌ No |
 | **Código** | **repositorio git** de cada app | ❌ No |
 | **Config de PM2** | 🔴 **[`config/axioma/pm2/`](../config/axioma/)** — ⚠️ **NO el `ecosystem.config.js` del repo**, que difiere de producción (ver ficha de alvera) | ❌ No |
+| **Config de build del frontend** | 🔴 **[`config/axioma/frontend-env/`](../config/axioma/frontend-env/)** — los repos gitignorean todos los `.env`, así que **el `.env.production` no está en ninguno** | ❌ No |
 | **Configuración** (`.env`) | **`infra-secrets`** (SOPS) | ❌ No |
 | **Artefactos compilados** | pre-compilados en R2 (§10.1) o compilados desde el repo | ❌ No |
 | Puertos, vhosts, `ecosystem.config.js`, unidades systemd | ✅ **[`config/axioma/`](../config/axioma/)** *(versionado el 2026-08-12)* | ❌ No |
@@ -274,6 +275,13 @@ Por cada `<app>`, según su ficha:
   key. Si no está disponible, clonar por HTTPS con token, o traer el código del artefacto de §10.
 - [ ] **4.2** Colocar el **artefacto compilado** (`.next/`, `dist/`, `build/`) según la ficha.
       **No ejecutar `next build` en drp** (§0.2).
+- [ ] **4.2.1** 🔴 **Si hay que compilar el frontend, copiar primero su `.env.production`** desde
+      [`config/axioma/frontend-env/`](../config/axioma/frontend-env/). **Sin él, Vite compila con el
+      fallback de desarrollo** (`http://localhost:5000/api`) y la app **carga bien pero falla en el
+      login**. Verificar después:
+      ```bash
+      grep -c "localhost:5000" dist/assets/*.js     # debe dar 0
+      ```
 - [ ] **4.3** Instalar dependencias de producción — **esto sí se hace en drp**:
   ```bash
   cd /var/www/<app> && sudo -u <appuser> npm ci --omit=dev
