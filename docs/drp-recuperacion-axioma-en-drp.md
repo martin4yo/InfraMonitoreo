@@ -42,12 +42,12 @@ En una catástrofe **axioma no existe**. Todo lo necesario tiene que venir de ot
 | **Código** | **repositorio git** de cada app | ❌ No |
 | **Configuración** (`.env`) | **`infra-secrets`** (SOPS) | ❌ No |
 | **Artefactos compilados** | pre-compilados en R2 (§10.1) o compilados desde el repo | ❌ No |
-| Puertos, vhosts, `ecosystem.config.js` | 🔴 **hoy solo viven en axioma** | ⚠️ **SÍ — ver abajo** |
+| Puertos, vhosts, `ecosystem.config.js`, unidades systemd | ✅ **[`config/axioma/`](../config/axioma/)** *(versionado el 2026-08-12)* | ❌ No |
 
-> 🔴 **Hueco identificado el 2026-08-12.** Los **vhosts de nginx**, los **`ecosystem.config.js`** y las
-> **unidades systemd** existen **únicamente en axioma**. No están en ningún repositorio. Si axioma muere,
-> se pierden con él y hay que reconstruirlos de memoria. Las [fichas](./drp-fichas-apps-axioma.md) los
-> documentan parcialmente, pero **la copia fiel debe versionarse**. Acción pendiente en §10.
+> ✅ **Hueco cerrado el 2026-08-12.** Los 27 archivos de configuración que solo vivían en axioma están
+> versionados en [`config/axioma/`](../config/axioma/) — 12 vhosts, 4 ecosystem, 9 unidades systemd,
+> `nginx.conf` y los snippets anti-scanner. Verificados **sin secretos** antes de commitear.
+> **Con esto, ningún paso del runbook depende ya de que axioma exista.**
 
 ### 0.2 🔴 Regla de oro: **no se compila en drp**
 
@@ -413,9 +413,9 @@ Por cada `<app>`, según su ficha:
 - [ ] **10.4** **Acceso a Cloudflare (K8) documentado y compartido.** Sin DNS no hay servicio.
 - [ ] **10.5** **Deploy keys de GitHub** disponibles para el BT, o una copia del código fuera de los servers.
 - [ ] **10.6** **TTL bajo** en los registros DNS críticos.
-- [ ] **10.8** 🔴 **Versionar la configuración que solo vive en axioma**: vhosts de nginx,
-      `ecosystem.config.js` de cada app y unidades systemd. Hoy no están en ningún repo — si axioma
-      muere, se reconstruyen de memoria. *(Identificado en el simulacro del 2026-08-12.)*
+- [x] **10.8** ✅ **Configuración versionada el 2026-08-12** en [`config/axioma/`](../config/axioma/):
+      27 archivos, sin secretos. **Mantenerla al día es parte de C6** — es una foto, no la fuente de
+      verdad.
 - [ ] **10.7** **Ejecutar este runbook como simulacro, una app por vez.** Es lo que convierte este
       documento de hipótesis en procedimiento. Empezar por la ficha más simple, no por mediflow.
 
