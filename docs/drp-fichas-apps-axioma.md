@@ -17,7 +17,7 @@
 | **hub** | `hubapp` (993) | **5200** back · **8089** front | `hub_db` | `hubuser` | :5432 directo | `hub-backend`, `hub-frontend` | `AxiomaCloud/ProHub` (SSH) |
 | **parse** | `parseapp` (117) | **5100** back · **8087** front | `parse_db` | `parseuser` | **:6432** pgbouncer | `parse-backend` | `martin4yo/parse` (SSH) |
 | **mini** | `miniapp` (1002) | **8095** back | `mini_db` | `miniuser` | **:6432** pgbouncer | `mini-backend` | `martin4yo/AxiomaWeb` (SSH) |
-| **elore** | `eloreapp` (994) | **3700** | `elore_db` | `eloreuser` | :5432 directo | `elore` | ⚠️ **sin remote** |
+| **elore** | `eloreapp` (994) | **3700** | `elore_db` | `eloreuser` | :5432 directo | `elore` | `AxiomaCloud/Elore` rama `main` |
 | **evolution-api** | `evolutionapp` (996) | **8080** | `evolution` | *(a confirmar)* | *(a confirmar)* | *(vía systemd)* | `EvolutionAPI/evolution-api` |
 | **axio-db-agent** | `axioapp` (998) | **3005** | *4 bases ajenas* | ver ficha | :5432 directo | systemd, **sin PM2** | — |
 | **checkpoint** | *(a confirmar)* | estático | `checkpoint_db` | *(a confirmar)* | — | — | `AxiomaCloud/checkpointsite` |
@@ -270,8 +270,15 @@ Estas no son del DR: existen hoy en axioma y el ejercicio las hizo visibles.
 | **RAM medida** | 60 MB daemon (el proceso no apareció en la muestra) |
 
 **Particularidades:**
-- 🔴 **No tiene remote de git configurado.** Antes del primer simulacro hay que resolver de dónde sale el
-  código: es la única app cuyo origen no está identificado. **Sin esto, elore no se puede recuperar.**
+- ✅ **Repo identificado el 2026-08-12: `git@github.com:AxiomaCloud/Elore.git`, rama `main`.** El clon en
+  axioma no tiene el remote configurado, pero el repositorio existe y el acceso está verificado. **Bloqueante
+  resuelto.** *Acción: correr `git remote add origin` en `/var/www/elore` para que no vuelva a perderse.*
+- 🔴 **Su `ecosystem.config.js` NO está en el repo** — existe solo en axioma, y ahora en
+  [`config/axioma/pm2/`](../config/axioma/). **Consecuencia grave:** el repo usa
+  `America/Argentina/Buenos_Aires` en el código (`sla.ts`, `business-hours/route.ts`), pero **la TZ del
+  proceso la fija el ecosystem**. Desplegar elore solo desde el repo lo arranca en **UTC**, y el horario
+  laboral del SLA —que se calcula con `setHours`/`getDay` sobre la TZ del proceso— **queda mal en
+  silencio**. No falla: da resultados incorrectos. Es el mismo patrón que mediflow, pero **invisible**.
 - **`TZ: 'America/Argentina/Buenos_Aires'` se fija en el ecosystem, antes de arrancar Node.** El horario
   laboral del SLA se calcula con la TZ del proceso (`setHours`/`getDay`), no con `BusinessHours.timezone`.
   **Si se omite, los SLA se calculan mal en silencio** — no falla, da resultados incorrectos.
