@@ -21,6 +21,9 @@
 Aplica a **todo secreto** que dé acceso a un sistema, dato o servicio de la infraestructura Axioma:
 
 - Credenciales de base de datos (roles de PostgreSQL de las apps y `postgres`).
+- **Credenciales en ARCHIVO, no en variable de entorno** (claves de service account, certificados de
+  cliente, keystores) — *agregado 2026-08-12: el alcance solo contemplaba variables dentro de `.env`, y
+  por ese hueco `google-credentials.json` quedó sin respaldo (S19).*
 - **Contraseñas de cuentas de sistema operativo** con acceso administrativo (`axiomacloud` y toda cuenta
   con `sudo`) — *agregado 2026-08-09: el alcance original las omitía, y ese hueco se materializó (S16).*
 - **Claves de cifrado de datos de aplicación** (`ENCRYPTION_MASTER_KEY` y salts) — *agregado 2026-08-09.*
@@ -90,6 +93,7 @@ cuentas personales), salvo en cuanto a exigir MFA donde el proveedor lo ofrezca.
 | **S15** | **Claves de cifrado de datos de aplicación** — `ENCRYPTION_MASTER_KEY` + `SEARCH_HASH_SALT` (mediflow); `ENCRYPTION_KEY` + `SYNC_PASSWORD_KEY` (parse) | `mediflow-backend.env`, `parse-backend.env` (axioma) | RT | 🔴 **Crítica** | — | **Ver §4.3** (no rota por calendario) | ⚠ **Alta 2026-08-09.** Cifran datos **en reposo** de `mediflow_db`, la única base 🔴 del marco. **No estaban inventariadas** |
 | **S16** | **Contraseñas de cuentas de sistema operativo** — `axiomacloud` (los 5 servers), y toda cuenta con `sudo` | `/etc/shadow` de cada server + gestor de contraseñas | RT | 🔴 **Crítica** | **2026-08-09 (pendiente)** | **Anual** o ante exposición | 🔴 **EXPUESTA 2026-08-09** — ver §5.1/A6. **No estaban inventariadas**: §3 cubría el rol `postgres` (S07) y las claves SSH (S09) pero **no las contraseñas de cuentas de SO** |
 | **S17** | **Claves de API de proveedores de IA** — `ANTHROPIC_API_KEY` (×8), `GEMINI_API_KEY` (×2) | 8 `.env` en axioma y axiodemo | RT | 🟠 Alta | — | **Anual** | ⚠ Nuevas en el inventario. Tienen **presupuesto en USD** configurado (`ANTHROPIC_BUDGET_USD`, `GEMINI_BUDGET_USD` en parse) → una fuga es **gasto directo**, no solo acceso |
+| **S19** | 🔴 **`google-credentials.json`** — clave privada de service account de Google (Document AI) | `/var/www/parse/backend/google-credentials.json` (**axioma, única copia**) | RT | 🔴 **Crítica** | — | **Anual** | 🔴 **NO RESPALDADA.** Ni en el repo, ni en `infra-secrets`, ni en `config/axioma/`. El `.env` de parse **la referencia** (`GOOGLE_APPLICATION_CREDENTIALS=…`) y ese `.env` sí está cifrado — pero **apunta a un archivo que no lo está**. Descubierta en el simulacro del 2026-08-12 |
 | **S18** | **Credenciales filtradas en los logs de mini** — `whatsappApiKey` de Evolution API, `smtpPass` de Gmail (`info.viverolaslomas@`), 12 contraseñas de 4 usuarios de `nutriarroz` | `~/.pm2/pm2.log` de `miniapp` (axioma) | RT + equipo de mini | 🔴 **Crítica** | — | **Rotación inmediata** (exposición confirmada) | 🔴 **Abierto** — ver [hardening §9](../hardening.md) y A4. **Separado de S12 el 2026-08-09**: lo filtrado en mini **no** son credenciales de pago |
 
 > **Completitud del inventario.** Con el desglose de §3.2 (2026-08-09) quedan cubiertos **S06 y S08**.
@@ -190,6 +194,24 @@ y contarla como tal infla el inventario y desvía el esfuerzo.
 > No eran una fuga —no hay nada que filtrar en una variable vacía— pero el control de verificación
 > encontró de paso un error real de inventario. **Vale la pena dejarlo escrito: el chequeo previo al
 > commit es el que debe atrapar esto, no la revisión posterior.**
+
+### 3.6 🔴 El inventario solo miraba dentro de los `.env` (2026-08-12)
+
+El simulacro de recuperación de parse expuso un **hueco de alcance**, no de ejecución: la política de §1
+enumeraba tipos de secreto —credenciales de DB, API keys, claves de cifrado, claves SSH— **todos
+asumiendo que viven como variables dentro de un `.env`**. Los secretos que viven **en un archivo aparte**
+no estaban contemplados.
+
+Resultado concreto: **`google-credentials.json`** (S19). El `.env` de parse está prolijamente cifrado en
+`infra-secrets` y **referencia** ese archivo con `GOOGLE_APPLICATION_CREDENTIALS=…`. Un inventario que
+recorra los `.env` —como hizo §3.2— **lo da por cubierto**: ve la variable, no ve que apunta afuera.
+
+> **Es el modo de falla más sutil de todo el inventario.** No falta una entrada por olvido: falta porque
+> la definición de "secreto" excluía su formato. Se corrigió el alcance en §1.
+
+**Verificación de cobertura (2026-08-12):** se revisaron los 16 `.env` buscando variables que apunten a
+archivos de credenciales (`.json`, `.pem`, `.key`, `.p12`, `.crt`). **`GOOGLE_APPLICATION_CREDENTIALS` de
+parse es el único caso del parque.** Eso lo hace barato de resolver — y fácil de no notar nunca.
 
 ### 3.3 Hallazgos del inventario (2026-08-09)
 

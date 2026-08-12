@@ -65,11 +65,16 @@ otras apps ya corriendo. La separación que lo resuelve:
 
 > **Se compila afuera y se instala en drp.**
 >
-> ⚠️ **MATIZADO CON MEDICIÓN REAL (2026-08-12).** Se compiló el frontend de alvera **en drp**, con hub ya
-> corriendo: **33 segundos, y el mínimo de memoria disponible fue 1598 MB** de 3911. El pico consumió
-> ~1,2 GB. **La regla se relaja a: «compilar en drp es viable, de a UNA app por vez y midiendo».** Sigue
-> siendo preferible el artefacto pre-compilado —es 33 s contra minutos, por app— pero **compilar en drp
-> ya no es un bloqueante**, que es lo que este documento suponía antes de medirlo.
+> ⚠️ **CORREGIDO CON DOS MEDICIONES REALES (2026-08-12).** Se compiló en drp, con otras apps corriendo:
+>
+> | App | Herramienta | Tiempo | Mínimo de RAM libre | Pico consumido |
+> |---|---|---|---|---|
+> | alvera | Vite | **33 s** | 1598 MB | ~1,2 GB |
+> | parse | Next.js | **125 s** | **1785 MB** | ~770 MB |
+>
+> **La regla queda así: compilar en drp es viable, de a UNA app por vez y midiendo.** Ninguno de los dos
+> builds bajó de 1,5 GB libres. El artefacto pre-compilado sigue siendo preferible **por velocidad**
+> (33 s contra 125 s), **no por capacidad** — que es lo que este documento suponía antes de medirlo.
 
 ⚠️ **Y "afuera" no significa tu notebook.** El equipo de trabajo corre **Linux Mint 22.3 con glibc 2.39**;
 los servidores usan **glibc 2.35**. glibc es compatible hacia atrás, **no hacia adelante**: un binario

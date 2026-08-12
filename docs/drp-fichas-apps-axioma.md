@@ -261,7 +261,41 @@ Estas no son del DR: existen hoy en axioma y el ejercicio las hizo visibles.
 | **PM2** | `parse-backend` (`backend/src/index.js`, fork) |
 | **RAM medida** | **595 MB** — ⚠️ **la app más pesada del parque** |
 
+### ✅ SIMULACRO EJECUTADO — 2026-08-12 · **al primer intento**
+
+**parse levantó sin un solo reinicio ni error**, con hub y alvera ya corriendo. `SPA → 200` con
+`<title>Axioma - Parse</title>`, `API /api/health → 200`, **58 tablas** restauradas sin errores.
+Las **tres apps conviviendo**: 1256 MB usados de 3911.
+
+**Era la prueba de fuego**: la app más pesada del parque (595 MB en axioma), la de más módulos nativos
+(20 binarios `.node`, `sharp`, `bcrypt`, Prisma) y la del `PM2_HOME` no estándar. **Que saliera limpia
+valida el runbook** — los tropiezos de hub y alvera eran de las apps, no del procedimiento.
+
+**Medición del build de Next** (con las otras dos apps corriendo): **125 s, mínimo de memoria disponible
+1785 MB** de 3911. Consumió ~770 MB — **menos que el build de Vite de alvera** (que bajó a 1598 MB).
+
+> 📊 **Con dos mediciones, la "regla de oro" del runbook queda corregida por evidencia:** compilar en drp
+> consume entre **0,8 y 1,2 GB de pico** y deja más de 1,5 GB libres. **No es un bloqueante.** El artefacto
+> pre-compilado sigue siendo preferible por velocidad (33 s contra 125 s), no por capacidad.
+
+**El único ajuste necesario** fue el `NEXT_PUBLIC_API_URL` para el vhost del ensayo — el mismo tipo de
+cambio que en alvera, pero acá el valor de producción **sí estaba en `infra-secrets`**.
+
+#### ✅ Contraste con alvera: el esquema de config de build SÍ funciona
+
+| | alvera | **parse** |
+|---|---|---|
+| `.env` del frontend en `infra-secrets` | ❌ No existe | ✅ **Existe** (`NEXT_PUBLIC_API_URL=https://api.parse.axiomacloud.com`) |
+| Build de producción reproducible | ❌ No | ✅ **Sí** |
+
+> **Corrige una generalización apresurada.** Tras el simulacro de alvera se concluyó que la configuración
+> de build no estaba versionada. parse demuestra que **era específico de alvera**: el esquema funciona y a
+> alvera le falta una pieza. Si se hubiera generalizado desde un solo caso, se habría propuesto rediseñar
+> algo que ya andaba.
+
 **Particularidades:**
+- ✅ **`PM2_HOME` es `/var/www/parse/.pm2`** — se respetó en el simulacro y arrancó sin problemas. Confirmado
+  como el dato más fácil de pasar por alto: con el `PM2_HOME` por defecto, PM2 no encuentra la app.
 - 🔴 **`PM2_HOME` es `/var/www/parse/.pm2`, no `/home/parseapp/.pm2`.** Si PM2 "no encuentra" la app, es
   esto. Es la desviación más fácil de pasar por alto de todo el runbook.
 - Es la app con **más dependencias nativas**: 20 binarios `.node`, más `sharp`, `bcrypt` y Prisma.
@@ -271,6 +305,31 @@ Estas no son del DR: existen hoy en axioma y el ejercicio las hizo visibles.
   al procesar.
 - Tiene `ENCRYPTION_KEY` y `SYNC_PASSWORD_KEY` — mismo problema conceptual que mediflow, a confirmar
   si cifra datos en reposo.
+
+**🔴 `google-credentials.json` no está respaldado en NINGÚN lado** *(verificado 2026-08-12)*. El `.env`
+declara `GOOGLE_APPLICATION_CREDENTIALS=/var/www/parse/backend/google-credentials.json`, y ese archivo:
+
+| ¿Está en…? | |
+|---|---|
+| El repo de parse | ❌ No |
+| `infra-secrets` | ❌ No — solo está el `.env` que lo *referencia* |
+| `config/axioma/` | ❌ No |
+| **axioma** | ✅ **Única copia existente** |
+
+Es una **clave privada de service account de Google** (Document AI). A diferencia de `VITE_API_URL` o del
+`ecosystem.config.js`, **esto sí es un secreto** — y por eso no puede ir a `config/axioma/`, que es un
+directorio público del repo: **debe ir a `infra-secrets`**.
+
+> **Es el caso más grave de la familia.** El `.env` está prolijamente cifrado en `infra-secrets`, pero
+> **apunta a un archivo que no lo está**. Un inventario de secretos que solo mire los `.env` lo declara
+> cubierto y no lo está. Es una fuga silenciosa del alcance de [G7](./gobierno/g7-rotacion-secretos.md).
+>
+> **Y es el único de su tipo:** ninguna otra app del parque referencia archivos externos de credenciales
+> — se verificaron los 16 `.env`. Eso lo hace fácil de resolver, y fácil de olvidar.
+
+**Acción:** agregar `google-credentials.json` a `infra-secrets` (cifrado con SOPS) y sumar al inventario
+de G7 §3 una entrada para **credenciales en archivo**, que hoy la política no contempla: solo cubre
+variables dentro de `.env`.
 - `:8087` ya está en loopback (fix de H04).
 - El `ecosystem.config.js` documenta explícitamente **no correr PM2 como root**.
 
