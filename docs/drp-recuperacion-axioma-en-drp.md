@@ -361,6 +361,45 @@ Por cada `<app>`, según su ficha:
 > siguen apuntando a la IP de axioma. Ningún backup resuelve esto. Es **K8** del
 > [kit de continuidad](./gobierno/g9-continuidad-negocio.md).
 
+### 8.1 🔴 BLOQUEANTE VERIFICADO — el proveedor filtra 80/443 hacia drp
+
+**Mover el DNS no alcanza. Hoy el servicio quedaría caído igual.** Verificado el 2026-08-12:
+
+| Prueba | Resultado |
+|---|---|
+| nginx escuchando en `0.0.0.0:80` | ✅ |
+| `iptables`: `ACCEPT` para 80 y 443 | ✅ |
+| Desde drp → `127.0.0.1:80` | **200** |
+| Desde drp → **su propia IP pública** | 🔴 **000** |
+| Desde afuera → 22 | abierto |
+| Desde afuera → 80 y 443 | 🔴 **filtrados** |
+| Desde afuera → axioma:80 *(control)* | abierto |
+
+**El servidor está bien configurado; el paquete no llega.** El bloqueo está en la red del proveedor, y
+`ufw status` informa que todo está permitido — porque a nivel de sistema operativo lo está.
+
+> **Por qué es el peor modo de falla del plan.** Se puede ejecutar el runbook entero, restaurar, levantar
+> las apps, verificarlas en loopback con 200, mover el DNS… y el servicio sigue caído. **Nada de lo que se
+> mire desde el servidor lo revela.** Solo se detecta probando desde afuera — que es exactamente lo que un
+> simulacro hace y una revisión de configuración no.
+
+- [ ] **8.0** 🔴 **ANTES de mover el DNS: verificar que el 80 responde desde fuera de la red del proveedor.**
+  ```bash
+  curl -sS -o /dev/null -w '%{http_code}\n' --max-time 10 http://170.78.75.249/
+  ```
+  Si devuelve `000`, **detener el DR acá**: mover el DNS solo lograría apuntar los dominios a un servidor
+  inalcanzable, y además hay que esperar la propagación para volver atrás.
+
+**Acción pendiente:** solicitar al proveedor la habilitación de 80/443 entrantes para `170.78.75.249`, o
+revisar si su panel tiene un firewall de red aparte del del sistema. Riesgo **R21** en
+[G3](./gobierno/g3-registro-riesgos.md).
+
+**Mitigación provisional — túnel SSH** (sirve para verificar, **no** para dar servicio):
+```bash
+./scripts/80-drp-tunnel.sh          # levanta el túnel y prueba las apps
+./scripts/80-drp-tunnel.sh --stop   # lo baja
+```
+
 - [ ] **8.1** Entrar a **Cloudflare** (K8) y cambiar los registros `A` de axioma
       (`66.97.45.210`) a drp (`170.78.75.249`).
 - [ ] **8.2** Dominios a mover — todos los que servía axioma:
