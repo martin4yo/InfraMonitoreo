@@ -326,6 +326,16 @@ Por cada `<app>`, según su ficha:
     ssh axiomacloud@170.78.75.249 "sudo tee /var/www/<app>/backend/.env >/dev/null"
   ssh axiomacloud@170.78.75.249 "sudo chmod 600 /var/www/<app>/backend/.env && sudo chown <appuser>:<appuser> /var/www/<app>/backend/.env"
   ```
+- [ ] **5.3.1** 🔴 **Restaurar las credenciales que viven en ARCHIVO**, no solo los `.env`. Hoy aplica
+      únicamente a **parse**:
+      ```bash
+      sops --decrypt creds/axioma/parse-google-credentials.json \
+        > /var/www/parse/backend/google-credentials.json
+      chmod 600 /var/www/parse/backend/google-credentials.json
+      chown parseapp:parseapp /var/www/parse/backend/google-credentials.json
+      ```
+      ⚠️ **El `.env` restaurado apunta a este archivo con `GOOGLE_APPLICATION_CREDENTIALS`.** Si falta, la
+      app arranca igual y **falla al procesar PDFs** — sin relación obvia con el DR.
 - [ ] **5.4** Ajustar en el `.env` lo que cambia en drp: `DATABASE_URL` si se optó por A en §3.4, y las
       URLs públicas si el DNS todavía no apunta a drp.
 

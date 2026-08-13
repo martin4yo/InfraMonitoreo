@@ -327,9 +327,15 @@ directorio público del repo: **debe ir a `infra-secrets`**.
 > **Y es el único de su tipo:** ninguna otra app del parque referencia archivos externos de credenciales
 > — se verificaron los 16 `.env`. Eso lo hace fácil de resolver, y fácil de olvidar.
 
-**Acción:** agregar `google-credentials.json` a `infra-secrets` (cifrado con SOPS) y sumar al inventario
-de G7 §3 una entrada para **credenciales en archivo**, que hoy la política no contempla: solo cubre
-variables dentro de `.env`.
+✅ **RESUELTO el 2026-08-12.** Cifrado con SOPS en `infra-secrets/creds/axioma/parse-google-credentials.json`
+(11 campos cifrados, roundtrip verificado). Registrado como **S19** en [G7](./gobierno/g7-rotacion-secretos.md),
+con el alcance de la política corregido para incluir **credenciales en archivo**.
+
+**Al restaurar parse, además del `.env`:**
+```bash
+sops --decrypt creds/axioma/parse-google-credentials.json > /var/www/parse/backend/google-credentials.json
+chmod 600 … && chown parseapp:parseapp …
+```
 - `:8087` ya está en loopback (fix de H04).
 - El `ecosystem.config.js` documenta explícitamente **no correr PM2 como root**.
 
