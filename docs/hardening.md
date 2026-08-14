@@ -207,13 +207,26 @@ de exploración interactiva (el `bash_history` de root, continuo de enero a agos
 13–15 de julio), pero eso **no descarta** acceso a datos: `ssh host <cmd>` y `scp` no dejan rastro ahí.
 → **R20** en G3 · [G8 §4.2](./gobierno/g8-clasificacion-datos.md).
 
-**11.2 🔴 Cambio de `sshd` escrito y nunca aplicado — habilitación latente de password auth.**
+**11.2 ✅ RESUELTO 2026-08-13 — cambio de `sshd` escrito y nunca aplicado.**
 El 2026-08-09 20:54 se creó `/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf` en los **4 servers**
 con `Match User axiomacloud` + `PasswordAuthentication yes`. **Nunca tomó efecto**: `sshd` no se recargó
 (activo desde jul-14 / jul-16 / jul-17 / ago-01) y `sshd -T` sigue devolviendo `passwordauthentication no`.
 El archivo **sigue en disco**: el próximo `reload`, actualización de OpenSSH o reboot lo activa en silencio,
 con una contraseña ya expuesta. **Un cambio que no se aplicó es más peligroso que uno que sí, porque nadie
-lo está mirando.** *Fix:* borrar el archivo, no confiar en no recargar. → **R18**.
+lo está mirando.**
+
+> ✅ **Cerrado el 2026-08-13.** Archivo eliminado en los 4 servidores donde existía, con respaldo previo en
+> `/root/`. **axioma-drp verificado y limpio** (reinstalado el 08-08, nunca lo tuvo) → cobertura **5 de 5**.
+> `sshd -t` válido y config viva sin cambios en todos. **No se recargó `sshd`**: la configuración en
+> ejecución ya era la correcta y recargar era el único paso con riesgo real. Acceso verificado con
+> **conexión nueva** a los 5.
+>
+> ⚠️ **Hallazgo colateral (R22).** En `sshd_config.d` de **axioma, clubix y dev-1** quedaron
+> `custom.conf.bak-20260717-*` con **`PermitRootLogin yes`** — la configuración previa al hardening.
+> **Hoy no se aplican** (el `Include` es `*.conf` y esos nombres terminan en dígitos), pero es el mismo
+> patrón: un archivo con configuración insegura **dentro del directorio que `sshd` lee**. Basta renombrarlo
+> *"para restaurar"* y vuelve el login de root — sobre servidores con **~43 llaves del proveedor** en
+> `/root/.ssh/authorized_keys` que hoy están inertes **solo** por esa directiva.
 
 **11.3 ⚠️ Existe un segundo `axio-db-agent`, en clubix.**
 El §8 de este documento afirma: *"hay **un solo agente**, en **axioma**… En clubix y axiodemo **no existe**
