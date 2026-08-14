@@ -1,13 +1,18 @@
-# pgBackRest — repositorio central en dev-1 (transporte SSH)
+# pgBackRest — dual-repo: central en dev-1 (SSH) + Cloudflare R2 (S3)
 
-Los 4 servers hacen backup (full/diff/incr) y archivan WAL contra un **repositorio
-central en dev-1** (`/backup/pgbackrest`), comunicándose por **SSH**. Los backups se
-inician *desde* dev-1 (repo host), que se conecta a cada db host como `postgres` para
-leer el `PGDATA`; el `archive_command` de cada db host empuja el WAL *hacia* dev-1.
+Los 4 servers hacen backup (full/diff/incr) y archivan WAL contra **dos repositorios en
+paralelo** (pgBackRest los mantiene a ambos en cada operación):
 
-> Este es el estado **realmente implementado** (2026-05-26). Reemplaza el diseño TLS
-> que se había bocetado: al relevar los servers, dev-1 ya era repo host de axioma por
-> SSH y sin cifrado, así que se extendió ese esquema probado en vez de reconstruir.
+- **`repo1` — central en dev-1** (`/backup/pgbackrest`), transporte **SSH**. Los backups se
+  inician *desde* dev-1 (repo host), que se conecta a cada db host como `postgres` para leer
+  el `PGDATA`; el `archive_command` de cada db host empuja el WAL *hacia* dev-1.
+- **`repo2` — Cloudflare R2** (object storage S3-compatible), bucket `axiomacloud-pgbackrest`,
+  endpoint `*.r2.cloudflarestorage.com`. Copia **off-site** que elimina el single-point-of-failure
+  de tener el único repo en dev-1. **Cifrado en reposo** (`repo2-cipher-type`).
+
+> Este es el estado **realmente implementado** (repo1 desde 2026-05-26; repo2/R2 confirmado
+> 2026-07-17). El diseño TLS bocetado se descartó: dev-1 ya era repo host de axioma por SSH
+> sin cifrado, se extendió ese esquema probado y luego se sumó R2 como segunda copia off-site.
 
 ## Arquitectura
 
@@ -25,15 +30,33 @@ leer el `PGDATA`; el `archive_command` de cada db host empuja el WAL *hacia* dev
    stanza:AxiomaCloudProd  stanza:clubix            stanza:axiodemo
 
    dev-1 también respalda su PROPIA DB (PG14) vía SSH loopback → stanza:dev-1
+
+   además, en cada operación pgBackRest escribe TAMBIÉN a:
+        repo2 → Cloudflare R2 (S3)  bucket axiomacloud-pgbackrest  [off-site, cifrado]
 ```
 
 - **Versión unificada:** pgBackRest **2.58.0** en los 4 (repo oficial PGDG). pgBackRest
   exige la misma versión X.YY entre repo host y db hosts.
-- **Sin cifrado en reposo** (`repo1-cipher-type` no seteado), igual que el repo original.
-  El tránsito va cifrado por SSH. Migrar a repo cifrado requeriría re-crear las stanzas.
+- **repo1 (dev-1) sin cifrado en reposo** (`repo1-cipher-type` no seteado), igual que el
+  repo original; el tránsito va cifrado por SSH. **repo2 (R2) SÍ cifrado** (`repo2-cipher-type`)
+  — correcto, porque R2 es de un tercero. Migrar repo1 a cifrado requeriría re-crear las stanzas.
+- **repo2 / R2:** `repo2-type=s3`, bucket `axiomacloud-pgbackrest`, `repo2-s3-uri-style=path`,
+  `repo2-s3-region=auto`. Retención propia `repo2-retention-full=4`, `repo2-retention-diff=7`.
 - **Usuarios OS:** en dev-1 el repo lo maneja el usuario dedicado `pgbackrest`; en los
   db hosts el dueño es `postgres` (corre el `archive_command`).
 - **Retención:** `repo1-retention-full=4`, `repo1-retention-diff=7`.
+
+> **✓ Token R2 rotado (2026-07-17):** el API token de R2 (`repo2-s3-key` + `repo2-s3-key-secret`)
+> se **rotó** — el viejo (`a8790e48…`) quedó comprometido (expuesto en texto plano + sesión) y
+> fue **borrado en Cloudflare**; el nuevo (`b47676fd…`) se aplicó en los **5 archivos**: `dev-1`
+> (`pgbackrest.conf`+`db.conf`) y `axioma`/`clubix`/`axiodemo` (`pgbackrest.conf`), con backup
+> `.bak-<ts>` de cada uno. Verificado con `pgbackrest check` en las 4 stanzas (archiva a repo2/R2)
+> ANTES y DESPUÉS de borrar el viejo. El **`cipher-pass` NO se rotó** (cifra los backups ya en R2).
+> Credenciales custodiadas cifradas en `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS).
+>
+> **Pendiente menor:** las creds siguen en **texto plano** en los `pgbackrest.conf` (pgBackRest
+> las lee de ahí); protegidas por permisos 640 + firewall. SOPS es la copia custodiada, no el
+> origen que lee pgBackRest. Mejora futura: que el server las lea desde origen cifrado.
 
 ## Confianza SSH (bidireccional por stanza)
 

@@ -1,0 +1,476 @@
+#!/usr/bin/env bash
+# Restore drill de los backups en Cloudflare R2, corrido en esta máquina local.
+# Restaura cada stanza en un directorio temporal aislado bajo $DRILL_BASE, arranca
+# una instancia PG efímera en un puerto libre, verifica integridad y limpia.
+#
+# Sobre repo1 vs repo2: en dev-1, R2 es el repo2 (el repo1 es SSH local). Acá el R2
+# es el ÚNICO repo, así que la conf local lo renumera a repo1 (pgbackrest exige que
+# el primer repo sea repo1). Por eso fetch_r2_credentials lee las claves 'repo2-*'
+# de dev-1 pero write_local_conf las emite como 'repo1-*'. No es un error.
+#
+# Alcance: solo las 3 stanzas de PROD (dev-1 no entra en el drill). Ver ALL_STANZAS.
+#
+# Requiere: pgbackrest 2.58, pg14+pg16 binaries, sudo local→postgres sin password,
+#           y SSH+sudo a dev-1 para leer las credenciales R2.
+#
+# Uso:
+#   ./70-restore-drill.sh                        # las 3 stanzas de prod
+#   ./70-restore-drill.sh AxiomaCloudProd        # solo una
+#   ./70-restore-drill.sh clubix axiodemo        # subset
+
+set -euo pipefail
+
+# ── Configuración ────────────────────────────────────────────────────────────
+
+# Drill base en el home de postgres — evita conflictos de permisos en /tmp
+DRILL_BASE="/var/lib/postgresql/restore-drill"
+LOG_DIR="/tmp/restore-drill-logs"
+PGBACKREST_CONF="${DRILL_BASE}/pgbackrest-local.conf"
+LOG_FILE="${LOG_DIR}/drill-$(date +%Y%m%d-%H%M%S).log"
+
+# Historial versionado: una fila por (corrida, stanza) que se commitea al repo.
+# Lo escribe el usuario que corre el script (dueño del repo), no postgres.
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+HISTORY_CSV="${REPO_DIR}/docs/drill-history.csv"
+DRILL_TS="$(date '+%Y-%m-%d %H:%M:%S')"
+
+PG14_BIN="/usr/lib/postgresql/14/bin"
+PG16_BIN="/usr/lib/postgresql/16/bin"
+
+DEV1_SSH="axiomacloud@149.50.148.198"
+
+# Puertos efímeros (evitan colisión con el 5432 local)
+PORT_AxiomaCloudProd=5442
+PORT_clubix=5443
+PORT_axiodemo=5444
+
+# ── Stanzas ──────────────────────────────────────────────────────────────────
+
+declare -A STANZA_PG_VER=(  [AxiomaCloudProd]=14  [clubix]=14  [axiodemo]=16 )
+declare -A STANZA_PORT=(
+    [AxiomaCloudProd]=$PORT_AxiomaCloudProd
+    [clubix]=$PORT_clubix
+    [axiodemo]=$PORT_axiodemo
+)
+ALL_STANZAS=(AxiomaCloudProd clubix axiodemo)
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+BOLD='\033[1m'; RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+
+log()    { echo -e "$(date '+%H:%M:%S') $*" | tee -a "$LOG_FILE"; }
+ok()     { log "${GREEN}[OK]${NC}   $*"; }
+fail()   { log "${RED}[FAIL]${NC} $*"; FAILURES+=("$*"); }
+info()   { log "${YELLOW}[--]${NC}   $*"; }
+header() {
+    echo -e "\n${BOLD}══════════════════════════════════════════════${NC}" | tee -a "$LOG_FILE"
+    echo -e "${BOLD}  $*${NC}" | tee -a "$LOG_FILE"
+    echo -e "${BOLD}══════════════════════════════════════════════${NC}" | tee -a "$LOG_FILE"
+}
+
+FAILURES=()
+declare -A DRILL_RESULTS=()
+
+sudo_pg() { sudo -u postgres -H "$@"; }
+
+# ── Paso 1: obtener credenciales R2 desde dev-1 ──────────────────────────────
+
+fetch_r2_credentials() {
+    info "Leyendo credenciales R2 desde dev-1..."
+    local conf
+    conf=$(ssh "$DEV1_SSH" "sudo cat /etc/pgbackrest/pgbackrest.conf")
+
+    # Extrae el valor de una clave 'clave=valor' de la conf, tolerando espacios
+    # alrededor del '=' y recortando espacios al inicio/fin del valor. Ancla la
+    # clave al comienzo de línea para no confundir repo2-s3-key con repo2-s3-key-secret.
+    conf_val() {
+        echo "$conf" | sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$/\1/p" | head -n1
+    }
+    R2_BUCKET=$(   conf_val 'repo2-s3-bucket')
+    R2_ENDPOINT=$( conf_val 'repo2-s3-endpoint')
+    R2_REGION=$(   conf_val 'repo2-s3-region')
+    R2_KEY=$(      conf_val 'repo2-s3-key')
+    R2_SECRET=$(   conf_val 'repo2-s3-key-secret')
+    R2_CIPHER=$(   conf_val 'repo2-cipher-pass')
+
+    [[ -z "$R2_BUCKET" || -z "$R2_SECRET" || -z "$R2_CIPHER" ]] && {
+        echo "ERROR: no se pudieron leer las credenciales R2 desde dev-1" >&2; exit 1
+    }
+    ok "Credenciales R2 obtenidas (bucket: $R2_BUCKET)"
+}
+
+# ── Paso 2: generar pgbackrest.conf local ────────────────────────────────────
+
+write_local_conf() {
+    sudo_pg mkdir -p "${DRILL_BASE}/log" "${DRILL_BASE}/lock"
+    mkdir -p "$LOG_DIR"
+    # Escribir conf como postgres para que tenga acceso de lectura
+    sudo_pg bash -c "cat > '${PGBACKREST_CONF}'" <<EOF
+[global]
+repo1-type=s3
+repo1-path=/pgbackrest
+repo1-s3-bucket=${R2_BUCKET}
+repo1-s3-endpoint=${R2_ENDPOINT}
+repo1-s3-region=${R2_REGION}
+repo1-s3-uri-style=path
+repo1-s3-key=${R2_KEY}
+repo1-s3-key-secret=${R2_SECRET}
+repo1-cipher-type=aes-256-cbc
+repo1-cipher-pass=${R2_CIPHER}
+repo1-bundle=y
+compress-type=lz4
+log-level-console=info
+log-level-file=detail
+log-path=${DRILL_BASE}/log
+lock-path=${DRILL_BASE}/lock
+log-level-stderr=off
+
+[AxiomaCloudProd]
+pg1-path=${DRILL_BASE}/AxiomaCloudProd/pgdata
+
+[clubix]
+pg1-path=${DRILL_BASE}/clubix/pgdata
+
+[axiodemo]
+pg1-path=${DRILL_BASE}/axiodemo/pgdata
+EOF
+    sudo_pg chmod 600 "$PGBACKREST_CONF"
+    ok "Config local escrita en $PGBACKREST_CONF"
+}
+
+# ── Paso 3: restore de una stanza ────────────────────────────────────────────
+
+restore_stanza() {
+    local stanza=$1
+    local pgver=${STANZA_PG_VER[$stanza]}
+    local pgdata="${DRILL_BASE}/${stanza}/pgdata"
+
+    header "RESTORE: ${stanza} (PG${pgver})"
+
+    # Limpiar ejecución anterior
+    if [[ -d "$pgdata" ]]; then
+        info "Limpiando pgdata anterior..."
+        sudo_pg "/usr/lib/postgresql/${pgver}/bin/pg_ctl" \
+            stop -D "$pgdata" -m immediate 2>/dev/null || true
+        sudo_pg rm -rf "$pgdata"
+    fi
+
+    # El directorio base debe ser de postgres para que pueda crear pgdata
+    sudo_pg mkdir -p "${DRILL_BASE}/${stanza}"
+    sudo_pg mkdir -p "$pgdata"
+    sudo_pg chmod 700 "$pgdata"
+
+    info "Iniciando pgbackrest restore desde R2..."
+    local t0=$SECONDS
+
+    # --type=standby hace que pgbackrest escriba recovery.signal + restore_command
+    # apuntando al propio pgbackrest, para que PG pueda aplicar el WAL archivado en R2
+    # durante el startup. El --target-action=promote hace que PG promueva al llegar
+    # al último WAL disponible en el archive.
+    sudo_pg pgbackrest \
+        --config="$PGBACKREST_CONF" \
+        --stanza="$stanza" \
+        --type=standby \
+        restore 2>&1 | tee -a "$LOG_FILE" || {
+        fail "${stanza}: pgbackrest restore retornó error"
+        return 1
+    }
+
+    local elapsed=$(( SECONDS - t0 ))
+    ok "Restore completado en ${elapsed}s"
+
+    # Capturar qué backup se usó
+    local label
+    label=$(sudo_pg pgbackrest --config="$PGBACKREST_CONF" --stanza="$stanza" \
+                --output=json info 2>/dev/null \
+            | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+backups = d[0]['backup']
+print(backups[-1]['label'] if backups else 'N/A')
+" 2>/dev/null || echo "N/A")
+
+    info "Backup restaurado: $label (WAL replay hasta último segmento archivado)"
+    DRILL_RESULTS[$stanza]="backup=${label} restore=${elapsed}s"
+}
+
+# ── Paso 4: arrancar instancia PG temporal ───────────────────────────────────
+
+start_temp_pg() {
+    local stanza=$1
+    local pgver=${STANZA_PG_VER[$stanza]}
+    local pgdata="${DRILL_BASE}/${stanza}/pgdata"
+    local port=${STANZA_PORT[$stanza]}
+    local pglog="${DRILL_BASE}/${stanza}/pg.log"
+
+    info "Arrancando PG${pgver} en puerto ${port}..."
+
+    # pg_hba.conf: en Ubuntu el PGDATA de producción no lo incluye (está en /etc/postgresql).
+    # SIEMPRE generamos uno mínimo con 'trust' — NO copiar el del cluster local.
+    # Copiarlo fue la causa de FAIL sistemático en las stanzas PG14 (2026-07-19):
+    # /etc/postgresql/14/main/pg_hba.conf existe en el ejecutor y trae
+    # 'host all all 127.0.0.1/32 scram-sha-256', así que la instancia restaurada
+    # pedía password y el psql del drill (-h 127.0.0.1 -U postgres, sin credencial)
+    # era rechazado por AUTENTICACIÓN — no porque PG estuviera caído. axiodemo (PG16)
+    # pasaba solo porque no hay /etc/postgresql/16 y caía en el 'trust' de este else.
+    # 'trust' es seguro acá: PGDATA temporal, aislado, solo loopback, se borra al final.
+    sudo_pg bash -c "cat > '${pgdata}/pg_hba.conf'" <<'HBAEOF'
+local   all   all                trust
+host    all   all   127.0.0.1/32 trust
+HBAEOF
+    info "pg_hba.conf mínimo (trust, loopback) generado"
+
+    # pg_ident.conf también puede faltar
+    [[ ! -f "${pgdata}/pg_ident.conf" ]] && sudo_pg touch "${pgdata}/pg_ident.conf"
+
+    # Sobreescribir parámetros en postgresql.conf
+    sudo_pg bash -c "cat >> '${pgdata}/postgresql.conf'" <<PGEOF
+
+# restore-drill overrides
+port = ${port}
+hba_file = '${pgdata}/pg_hba.conf'
+ident_file = '${pgdata}/pg_ident.conf'
+PGEOF
+
+    # --type=standby escribe standby.signal; lo reemplazamos por recovery.signal
+    # para que PG aplique el WAL archivado y luego promueva en lugar de quedarse
+    # esperando un primary.
+    sudo_pg bash -c "rm -f '${pgdata}/standby.signal' && touch '${pgdata}/recovery.signal'"
+
+    # El WAL replay desde R2 puede tardar varios minutos; timeout generoso.
+    # Capturamos el exit de pg_ctl (no el de tee) via PIPESTATUS para no seguir
+    # a la verificación con una instancia que nunca arrancó.
+    sudo_pg "/usr/lib/postgresql/${pgver}/bin/pg_ctl" \
+        start -D "$pgdata" -l "$pglog" -w -t 300 2>&1 | tee -a "$LOG_FILE"
+    if (( ${PIPESTATUS[0]} != 0 )); then
+        fail "${stanza}: pg_ctl start falló — PG no arrancó"
+        info "Últimas líneas de ${pglog}:"
+        sudo_pg tail -n 20 "$pglog" 2>/dev/null | tee -a "$LOG_FILE" || true
+        return 1
+    fi
+
+    ok "Instancia PG${pgver} arrancada en puerto ${port} (aplicando WAL archive...)"
+}
+
+# ── Paso 5: verificación ─────────────────────────────────────────────────────
+
+verify_stanza() {
+    local stanza=$1
+    local pgver=${STANZA_PG_VER[$stanza]}
+    local port=${STANZA_PORT[$stanza]}
+    local psql="/usr/lib/postgresql/${pgver}/bin/psql"
+    local conn="-h 127.0.0.1 -p ${port} -U postgres"
+
+    header "VERIFICACIÓN: ${stanza}"
+
+    # 1. Conectividad — con espera. Durante el replay inicial del WAL, PG rechaza
+    #    conexiones con "FATAL: the database system is starting up". Cuanto más
+    #    grande la base, más tarda en llegar a estado consistente: un intento único
+    #    da falsos FAIL en las stanzas grandes (AxiomaCloudProd/clubix) y solo pasa
+    #    la chica (axiodemo). Reintentar hasta 300s, igual que el paso 2.
+    local conn_ok="" conn_deadline
+    conn_deadline=$(( SECONDS + 300 ))
+    while (( SECONDS < conn_deadline )); do
+        if sudo_pg "$psql" $conn -tAq -c "SELECT 1" 2>/dev/null | grep -q 1; then
+            conn_ok=1
+            break
+        fi
+        info "  Esperando que PG acepte conexiones en ${port} (replay inicial del WAL)..."
+        sleep 5
+    done
+    if [[ -n "$conn_ok" ]]; then
+        ok "PostgreSQL acepta conexiones en puerto ${port}"
+    else
+        fail "${stanza}: PostgreSQL no responde en puerto ${port} tras 300s"
+        return 1
+    fi
+
+    # 2. Esperar promoción — el WAL replay desde R2 puede tardar varios minutos
+    local in_recovery deadline
+    deadline=$(( SECONDS + 300 ))
+    while (( SECONDS < deadline )); do
+        in_recovery=$(sudo_pg "$psql" $conn -tAq -c "SELECT pg_is_in_recovery();" 2>/dev/null | tr -d ' \n')
+        [[ "$in_recovery" == "f" ]] && break
+        local last_ts
+        last_ts=$(sudo_pg "$psql" $conn -tAq \
+            -c "SELECT to_char(pg_last_xact_replay_timestamp(),'HH24:MI:SS');" \
+            2>/dev/null | tr -d ' \n')
+        info "  WAL replay en curso... último xact: ${last_ts:-desconocido}"
+        sleep 5
+    done
+    if [[ "$in_recovery" == "f" ]]; then
+        ok "Instancia promovida correctamente"
+    else
+        fail "${stanza}: instancia sigue en recovery tras 300s"
+    fi
+
+    # 2b. Verificar frescura del WAL: el último xact reproducido debe estar
+    #     dentro de los últimos 30 minutos (frecuencia de incr = 4h, pero el
+    #     WAL archive debería tener segmentos de hace pocos minutos).
+    local last_xact_epoch now_epoch wal_lag_min
+    last_xact_epoch=$(sudo_pg "$psql" $conn -tAq \
+        -c "SELECT EXTRACT(EPOCH FROM pg_last_xact_replay_timestamp())::bigint;" \
+        2>/dev/null | tr -d ' \n')
+    now_epoch=$(date +%s)
+    if [[ -n "$last_xact_epoch" && "$last_xact_epoch" -gt 0 ]]; then
+        wal_lag_min=$(( (now_epoch - last_xact_epoch) / 60 ))
+        (( wal_lag_min < 0 )) && wal_lag_min=0   # skew de reloj → no negativo
+        if (( wal_lag_min <= 30 )); then
+            ok "Último xact reproducido hace ${wal_lag_min} min — WAL archive FRESCO"
+            DRILL_RESULTS[$stanza]+=" wal_lag=${wal_lag_min}m"
+        else
+            fail "${stanza}: último xact reproducido hace ${wal_lag_min} min — WAL archive DESACTUALIZADO (umbral 30min)"
+            DRILL_RESULTS[$stanza]+=" wal_lag=${wal_lag_min}m"
+        fi
+    else
+        fail "${stanza}: pg_last_xact_replay_timestamp() es NULL — no se aplicó WAL archive"
+        DRILL_RESULTS[$stanza]+=" wal_lag=NULL"
+    fi
+
+    # 3. Listar bases
+    info "Bases de datos:"
+    sudo_pg "$psql" $conn -c "\l" 2>/dev/null | tee -a "$LOG_FILE" || true
+
+    # 4. Contar tablas por base
+    local db_list total_tables=0
+    db_list=$(sudo_pg "$psql" $conn -tAq \
+        -c "SELECT datname FROM pg_database
+            WHERE datistemplate=false AND datname<>'postgres'
+            ORDER BY datname;" 2>/dev/null)
+
+    while IFS= read -r db; do
+        [[ -z "$db" ]] && continue
+        local cnt
+        cnt=$(sudo_pg "$psql" $conn -tAq -d "$db" \
+            -c "SELECT count(*) FROM information_schema.tables
+                WHERE table_schema NOT IN ('pg_catalog','information_schema');" \
+            2>/dev/null | tr -d ' \n')
+        cnt=${cnt:-0}
+        info "  ${db}: ${cnt} tablas"
+        total_tables=$(( total_tables + cnt ))
+    done <<< "$db_list"
+
+    if (( total_tables > 0 )); then
+        ok "Total tablas: ${total_tables}"
+    else
+        fail "${stanza}: 0 tablas encontradas"
+    fi
+
+    # 5. Antigüedad del backup (umbral 25h = incr cada 4h + holgura)
+    local stop_epoch now_epoch age_h
+    stop_epoch=$(sudo_pg pgbackrest \
+        --config="$PGBACKREST_CONF" --stanza="$stanza" \
+        --output=json info 2>/dev/null \
+        | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+b = d[0]['backup']
+print(b[-1]['timestamp']['stop'] if b else 0)
+" 2>/dev/null || echo 0)
+
+    now_epoch=$(date +%s)
+    age_h=$(( (now_epoch - stop_epoch) / 3600 ))
+    # Piso en 0: si el reloj local va atrás del server, stop puede quedar en el
+    # "futuro" y dar edad negativa, que pasaría el umbral <=25 sin ser realmente
+    # fresco. Un backup con timestamp futuro es anómalo → lo tratamos como 0h.
+    (( age_h < 0 )) && age_h=0
+
+    if (( age_h <= 25 )); then
+        ok "Backup tiene ${age_h}h de antigüedad — AL DÍA"
+        DRILL_RESULTS[$stanza]+=" age=${age_h}h STATUS=OK"
+    else
+        fail "${stanza}: backup tiene ${age_h}h de antigüedad — DESACTUALIZADO"
+        DRILL_RESULTS[$stanza]+=" age=${age_h}h STATUS=FAIL"
+    fi
+}
+
+# ── Paso 6: limpieza ─────────────────────────────────────────────────────────
+
+cleanup_stanza() {
+    local stanza=$1
+    local pgver=${STANZA_PG_VER[$stanza]}
+    local pgdata="${DRILL_BASE}/${stanza}/pgdata"
+    local pgctl="/usr/lib/postgresql/${pgver}/bin/pg_ctl"
+
+    info "Deteniendo instancia temporal ${stanza}..."
+    sudo_pg "$pgctl" stop -D "$pgdata" -m fast 2>/dev/null \
+        && ok "Instancia ${stanza} detenida" \
+        || info "Instancia ${stanza} ya estaba detenida"
+
+    sudo_pg rm -rf "${DRILL_BASE:?}/${stanza}"
+    ok "Directorio de ${stanza} eliminado"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+main() {
+    local stanzas=("${@:-${ALL_STANZAS[@]}}")
+
+    mkdir -p "$LOG_DIR"
+    sudo_pg mkdir -p "${DRILL_BASE}/log" "${DRILL_BASE}/lock"
+
+    header "RESTORE DRILL — $(date '+%Y-%m-%d %H:%M:%S')"
+    info "Stanzas: ${stanzas[*]}"
+    info "Log: $LOG_FILE"
+
+    fetch_r2_credentials
+    write_local_conf
+
+    for stanza in "${stanzas[@]}"; do
+        if restore_stanza "$stanza"; then
+            start_temp_pg  "$stanza" || { fail "${stanza}: no arrancó PG temporal"; continue; }
+            verify_stanza  "$stanza" || true
+        else
+            fail "${stanza}: restore fallido, saltando verificación"
+        fi
+    done
+
+    header "LIMPIEZA"
+    for stanza in "${stanzas[@]}"; do
+        cleanup_stanza "$stanza" || true
+    done
+    sudo_pg rm -f "$PGBACKREST_CONF"
+
+    # ── Resumen ──
+    header "RESUMEN"
+    printf "%-20s %-38s %-10s %-10s %-12s %s\n" "Stanza" "Backup" "Restore" "Edad" "WAL lag" "Estado" | tee -a "$LOG_FILE"
+    printf '%.0s─' {1..95} | tee -a "$LOG_FILE"; echo | tee -a "$LOG_FILE"
+
+    # Crear el CSV con su cabecera si no existe (versionado en el repo)
+    if [[ ! -f "$HISTORY_CSV" ]]; then
+        echo "fecha,ejecutor,stanza,backup,repo,restore,wal_lag,resultado" > "$HISTORY_CSV" 2>/dev/null || true
+    fi
+
+    for stanza in "${stanzas[@]}"; do
+        local res=${DRILL_RESULTS[$stanza]:-"no ejecutado"}
+        local backup elapsed age wal_lag status result
+        backup=$(  echo "$res" | grep -oP 'backup=\K\S+' || echo "-")
+        elapsed=$( echo "$res" | grep -oP 'restore=\K\S+' || echo "-")
+        age=$(     echo "$res" | grep -oP 'age=\K\S+' || echo "-")
+        wal_lag=$( echo "$res" | grep -oP 'wal_lag=\K\S+' || echo "-")
+        status=$(  echo "$res" | grep -oP 'STATUS=\K\S+' || echo "-")
+        printf "%-20s %-38s %-10s %-10s %-12s %s\n" "$stanza" "$backup" "$elapsed" "$age" "$wal_lag" "$status" | tee -a "$LOG_FILE"
+
+        # Append al historial versionado. La stanza sin STATUS=OK cuenta como FAIL
+        # (no llegó a verificarse o falló algún criterio). El repo local se renumera
+        # a repo1 (R2), pero en el origen es el repo2 de dev-1 → lo etiquetamos "R2".
+        [[ "$status" == "OK" ]] && result="PASS" || result="FAIL"
+        echo "${DRILL_TS},${USER:-$(id -un)},${stanza},${backup},R2,${elapsed},${wal_lag},${result}" \
+            >> "$HISTORY_CSV" 2>/dev/null \
+            || warn "no se pudo escribir $HISTORY_CSV (¿permisos?)"
+    done
+    echo "" | tee -a "$LOG_FILE"
+    info "Historial actualizado: $HISTORY_CSV (recordá commitearlo)"
+
+    if (( ${#FAILURES[@]} == 0 )); then
+        echo -e "${GREEN}${BOLD}✓  DRILL EXITOSO — todas las stanzas OK${NC}\n" | tee -a "$LOG_FILE"
+        exit 0
+    else
+        echo -e "${RED}${BOLD}✗  DRILL CON FALLOS:${NC}" | tee -a "$LOG_FILE"
+        printf '  • %s\n' "${FAILURES[@]}" | tee -a "$LOG_FILE"
+        echo "" | tee -a "$LOG_FILE"
+        exit 1
+    fi
+}
+
+main "$@"

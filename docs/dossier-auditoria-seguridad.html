@@ -1,0 +1,781 @@
+<title>Dossier de Auditoría — Infraestructura Axioma</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ground:#f6f7f9; --panel:#ffffff; --panel-2:#eef1f5;
+    --ink:#1a2028; --ink-soft:#4a5568; --ink-faint:#6b7688;
+    --accent:#1e4d6b; --accent-soft:#2f6b8f; --accent-wash:#e8eef3;
+    --rule:#dbe0e8; --rule-strong:#c3cad6;
+    --ok:#2f7d4f; --ok-wash:#e5f1ea;
+    --warn:#a8790f; --warn-wash:#f6efdd;
+    --crit:#b23b3b; --crit-wash:#f6e4e3;
+    --info:#42566b; --info-wash:#e9edf1;
+    --shadow:0 1px 2px rgba(20,35,55,.06),0 6px 20px rgba(20,35,55,.05);
+    --mono:ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter var",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --ground:#0e1218; --panel:#161c25; --panel-2:#1c242f;
+      --ink:#e7ebf1; --ink-soft:#a7b2c1; --ink-faint:#7c8798;
+      --accent:#5ea3cc; --accent-soft:#78b6da; --accent-wash:#17232e;
+      --rule:#26303c; --rule-strong:#37424f;
+      --ok:#5cbd85; --ok-wash:#15271d;
+      --warn:#d6a943; --warn-wash:#2a2313;
+      --crit:#e07373; --crit-wash:#2c1817;
+      --info:#8fa2b6; --info-wash:#1a222c;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.32);
+    }
+  }
+  :root[data-theme="light"]{
+    --ground:#f6f7f9; --panel:#ffffff; --panel-2:#eef1f5;
+    --ink:#1a2028; --ink-soft:#4a5568; --ink-faint:#6b7688;
+    --accent:#1e4d6b; --accent-soft:#2f6b8f; --accent-wash:#e8eef3;
+    --rule:#dbe0e8; --rule-strong:#c3cad6;
+    --ok:#2f7d4f; --ok-wash:#e5f1ea; --warn:#a8790f; --warn-wash:#f6efdd;
+    --crit:#b23b3b; --crit-wash:#f6e4e3; --info:#42566b; --info-wash:#e9edf1;
+    --shadow:0 1px 2px rgba(20,35,55,.06),0 6px 20px rgba(20,35,55,.05);
+  }
+  :root[data-theme="dark"]{
+    --ground:#0e1218; --panel:#161c25; --panel-2:#1c242f;
+    --ink:#e7ebf1; --ink-soft:#a7b2c1; --ink-faint:#7c8798;
+    --accent:#5ea3cc; --accent-soft:#78b6da; --accent-wash:#17232e;
+    --rule:#26303c; --rule-strong:#37424f;
+    --ok:#5cbd85; --ok-wash:#15271d; --warn:#d6a943; --warn-wash:#2a2313;
+    --crit:#e07373; --crit-wash:#2c1817; --info:#8fa2b6; --info-wash:#1a222c;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 26px rgba(0,0,0,.32);
+  }
+
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--serif);font-size:16.5px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 clamp(16px,4vw,48px)}
+  .layout{display:grid;grid-template-columns:1fr;gap:0}
+  @media(min-width:1080px){
+    .layout{grid-template-columns:230px minmax(0,1fr);gap:52px;align-items:start}
+  }
+
+  /* ---- masthead ---- */
+  header.mast{
+    border-top:4px solid var(--accent);
+    background:linear-gradient(180deg,var(--panel),var(--ground));
+    border-bottom:1px solid var(--rule);
+  }
+  .mast-inner{padding:clamp(30px,5vw,60px) 0 clamp(24px,3.5vw,40px)}
+  .kicker{
+    font-family:var(--sans);text-transform:uppercase;letter-spacing:.22em;
+    font-size:11.5px;font-weight:640;color:var(--accent-soft);margin:0 0 18px;
+    display:flex;gap:14px;align-items:center;flex-wrap:wrap;
+  }
+  .kicker .tick{width:26px;height:1px;background:var(--rule-strong)}
+  h1.title{
+    font-family:var(--sans);font-weight:720;letter-spacing:-.02em;
+    font-size:clamp(28px,4.4vw,46px);line-height:1.06;margin:0 0 20px;
+    text-wrap:balance;max-width:20ch;color:var(--ink);
+  }
+  .lede{font-size:clamp(16px,1.6vw,18.5px);color:var(--ink-soft);max-width:64ch;margin:0}
+  .meta-row{
+    display:flex;flex-wrap:wrap;gap:8px 10px;margin-top:26px;
+    font-family:var(--sans);font-size:12.5px;
+  }
+  .chip{
+    display:inline-flex;align-items:center;gap:7px;
+    background:var(--panel);border:1px solid var(--rule);border-radius:999px;
+    padding:5px 13px;color:var(--ink-soft);
+  }
+  .chip b{color:var(--ink);font-weight:620}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-soft)}
+
+  /* ---- side nav ---- */
+  nav.toc{font-family:var(--sans)}
+  @media(min-width:1080px){
+    nav.toc{position:sticky;top:26px;padding-top:44px}
+  }
+  nav.toc .toc-h{
+    text-transform:uppercase;letter-spacing:.16em;font-size:10.5px;font-weight:640;
+    color:var(--ink-faint);margin:0 0 12px;
+  }
+  nav.toc ol{list-style:none;margin:0 0 24px;padding:0;
+    border-left:1px solid var(--rule);
+  }
+  nav.toc a{
+    display:flex;gap:10px;text-decoration:none;color:var(--ink-soft);
+    font-size:13px;line-height:1.35;padding:7px 0 7px 14px;margin-left:-1px;
+    border-left:2px solid transparent;transition:color .15s,border-color .15s;
+  }
+  nav.toc a:hover{color:var(--accent-soft)}
+  nav.toc a.active{color:var(--ink);border-left-color:var(--accent);font-weight:600}
+  nav.toc a .n{color:var(--ink-faint);font-variant-numeric:tabular-nums;min-width:16px}
+  .theme-toggle{
+    font-family:var(--sans);font-size:12px;cursor:pointer;
+    background:var(--panel);border:1px solid var(--rule);color:var(--ink-soft);
+    border-radius:8px;padding:8px 12px;display:inline-flex;gap:8px;align-items:center;
+    width:100%;justify-content:center;
+  }
+  .theme-toggle:hover{border-color:var(--rule-strong);color:var(--ink)}
+
+  /* ---- content flow ---- */
+  main{padding:8px 0 90px;min-width:0}
+  section.block{padding:38px 0;border-top:1px solid var(--rule)}
+  section.block:first-of-type{border-top:none}
+  .sec-head{display:flex;gap:16px;align-items:baseline;margin:0 0 6px}
+  .sec-num{
+    font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent-soft);
+    background:var(--accent-wash);border-radius:6px;padding:3px 9px;
+    letter-spacing:.02em;flex:none;position:relative;top:-2px;
+  }
+  h2{
+    font-family:var(--sans);font-weight:680;letter-spacing:-.012em;
+    font-size:clamp(20px,2.5vw,26px);line-height:1.15;margin:0;color:var(--ink);
+    text-wrap:balance;
+  }
+  h3{
+    font-family:var(--sans);font-weight:640;font-size:16px;letter-spacing:-.005em;
+    margin:30px 0 12px;color:var(--ink);
+  }
+  p{margin:0 0 15px;max-width:68ch}
+  .sub{color:var(--ink-soft);font-size:14.5px;max-width:70ch;margin:-2px 0 18px}
+  a.ref{color:var(--accent-soft);text-decoration:none;border-bottom:1px solid transparent}
+  a.ref:hover{border-bottom-color:currentColor}
+  code,.mono{font-family:var(--mono);font-size:.86em}
+  p code,td code,li code{
+    background:var(--panel-2);padding:.1em .38em;border-radius:4px;
+    color:var(--ink);border:1px solid var(--rule);white-space:nowrap;
+  }
+  strong{font-weight:640;color:var(--ink)}
+
+  /* ---- executive callout ---- */
+  .exec{
+    background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+    padding:clamp(20px,3vw,30px);box-shadow:var(--shadow);margin-bottom:8px;
+  }
+  .exec p:last-child{margin-bottom:0}
+  .exec .flag{
+    font-family:var(--sans);font-size:11px;text-transform:uppercase;letter-spacing:.16em;
+    color:var(--accent-soft);font-weight:640;margin-bottom:12px;display:block;
+  }
+  .callout.warn{
+    background:var(--panel);border:1px solid var(--rule);border-left:4px solid var(--warn);
+    border-radius:12px;padding:16px 18px;margin:14px 0 8px;box-shadow:var(--shadow);
+  }
+  .callout.warn p{margin:0;font-size:14.5px}
+
+  /* ---- maturity grid ---- */
+  .grid-mat{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:14px;margin-top:22px}
+  .mat-card{
+    background:var(--panel);border:1px solid var(--rule);border-radius:12px;
+    padding:16px 17px 17px;position:relative;overflow:hidden;box-shadow:var(--shadow);
+  }
+  .mat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+  .mat-card.g::before{background:var(--ok)} .mat-card.y::before{background:var(--warn)}
+  .mat-card.r::before{background:var(--crit)}
+  .mat-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px}
+  .mat-dom{font-family:var(--sans);font-weight:640;font-size:14px;color:var(--ink);line-height:1.25}
+  .mat-body{font-size:13px;line-height:1.5;color:var(--ink-soft);margin:0}
+  .light{
+    font-family:var(--sans);font-size:10.5px;font-weight:660;text-transform:uppercase;
+    letter-spacing:.07em;padding:3px 9px;border-radius:999px;white-space:nowrap;flex:none;
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  .light::before{content:"";width:7px;height:7px;border-radius:50%}
+  .light.g{background:var(--ok-wash);color:var(--ok)} .light.g::before{background:var(--ok)}
+  .light.y{background:var(--warn-wash);color:var(--warn)} .light.y::before{background:var(--warn)}
+  .light.r{background:var(--crit-wash);color:var(--crit)} .light.r::before{background:var(--crit)}
+
+  /* ---- tables ---- */
+  .tbl-scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:12px;background:var(--panel);
+    box-shadow:var(--shadow);margin:18px 0}
+  table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:13px;min-width:640px}
+  table.wide{min-width:840px}
+  thead th{
+    text-align:left;font-weight:620;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--ink-faint);background:var(--panel-2);padding:11px 14px;
+    border-bottom:1px solid var(--rule-strong);white-space:nowrap;position:sticky;top:0;
+  }
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--rule);color:var(--ink-soft);vertical-align:top;line-height:1.5}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:var(--accent-wash)}
+  td b,td strong{color:var(--ink)}
+  .num{font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:12px}
+  td.center{text-align:center}
+
+  /* status pills inside tables */
+  .st{display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-weight:600;
+    font-size:11px;padding:2px 8px;border-radius:6px;white-space:nowrap}
+  .st::before{content:"";width:6px;height:6px;border-radius:50%}
+  .st.ok{background:var(--ok-wash);color:var(--ok)} .st.ok::before{background:var(--ok)}
+  .st.part{background:var(--warn-wash);color:var(--warn)} .st.part::before{background:var(--warn)}
+  .st.gap{background:var(--crit-wash);color:var(--crit)} .st.gap::before{background:var(--crit)}
+  .st.na{background:var(--info-wash);color:var(--info)} .st.na::before{background:var(--info)}
+
+  .sev{font-family:var(--mono);font-weight:700;font-size:12px;text-align:center;white-space:nowrap}
+  .sev.h{color:var(--crit)} .sev.m{color:var(--warn)} .sev.l{color:var(--ok)}
+
+  /* ---- findings ---- */
+  .find{
+    background:var(--panel);border:1px solid var(--rule);border-radius:11px;
+    padding:0;margin:12px 0;display:grid;grid-template-columns:6px 1fr;overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .find .stripe{width:6px}
+  .find.h .stripe{background:var(--crit)} .find.m .stripe{background:var(--warn)} .find.l .stripe{background:var(--ok)}
+  .find .fbody{padding:15px 18px}
+  .find .fhead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:7px}
+  .find .fid{font-family:var(--mono);font-weight:700;font-size:13px;color:var(--accent-soft)}
+  .find .ftitle{font-family:var(--sans);font-weight:620;font-size:14.5px;color:var(--ink);line-height:1.35;flex:1;min-width:200px}
+  .find .fmeta{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px;font-family:var(--sans)}
+  .tag{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:5px;background:var(--panel-2);
+    color:var(--ink-soft);border:1px solid var(--rule);white-space:nowrap}
+  .tag.cis{background:var(--accent-wash);color:var(--accent-soft);border-color:transparent}
+  .find .fdesc{font-size:13.5px;color:var(--ink-soft);line-height:1.55;margin:0}
+
+  /* ---- gaps ---- */
+  .gaps{display:grid;gap:11px;margin-top:20px}
+  .gap{
+    background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--crit);
+    border-radius:9px;padding:15px 18px;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;
+  }
+  .gap .gid{font-family:var(--mono);font-weight:700;color:var(--crit);font-size:14px;padding-top:1px}
+  .gap .gtitle{font-family:var(--sans);font-weight:620;color:var(--ink);font-size:14px;display:block;margin-bottom:4px}
+  .gap .gtxt{font-size:13.5px;color:var(--ink-soft);line-height:1.55}
+  .gap.done{border-left-color:var(--ok)}
+  .gap.done .gid{color:var(--ok)}
+  .gap .gbadge{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;
+    background:var(--ok-wash);color:var(--ok);border-radius:5px;padding:1px 7px;margin-left:8px;vertical-align:1px}
+
+  /* diagram */
+  .diagram{background:var(--panel-2);border:1px solid var(--rule);border-radius:11px;
+    padding:18px 20px;overflow-x:auto;margin:18px 0}
+  .diagram pre{margin:0;font-family:var(--mono);font-size:12px;line-height:1.55;color:var(--ink-soft);white-space:pre}
+
+  ul.tick{list-style:none;padding:0;margin:14px 0;display:grid;gap:9px}
+  ul.tick li{padding-left:26px;position:relative;font-size:14px;color:var(--ink-soft);line-height:1.55;max-width:74ch}
+  ul.tick li::before{content:"";position:absolute;left:2px;top:9px;width:11px;height:6px;
+    border-left:2px solid var(--accent-soft);border-bottom:2px solid var(--accent-soft);transform:rotate(-45deg)}
+  ul.plain{padding-left:0;list-style:none;margin:12px 0;display:grid;gap:8px}
+  ul.plain li{padding-left:18px;position:relative;font-size:14px;color:var(--ink-soft);line-height:1.55;max-width:74ch}
+  ul.plain li::before{content:"—";position:absolute;left:0;color:var(--ink-faint)}
+
+  .note{font-size:12.5px;color:var(--ink-faint);font-style:italic;margin:10px 0 0;max-width:74ch;line-height:1.5}
+  .note::before{content:"▸ ";font-style:normal;color:var(--accent-soft)}
+
+  footer.doc{border-top:1px solid var(--rule);padding:34px 0 60px;color:var(--ink-faint);
+    font-family:var(--sans);font-size:12.5px}
+  footer.doc .fnote{max-width:78ch;line-height:1.6;margin-bottom:6px}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--sans);font-size:12px;
+    color:var(--ink-faint);margin:6px 0 2px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:9px;height:9px;border-radius:50%;font-style:normal}
+</style>
+
+<header class="mast">
+  <div class="wrap mast-inner">
+    <p class="kicker"><span>Dossier de Auditoría</span><span class="tick"></span><span>Confidencial · Uso del auditor</span></p>
+    <h1 class="title">Seguridad y Continuidad — Infraestructura Axioma</h1>
+    <p class="lede">Material estructurado para una auditoría externa formal de la postura de seguridad, monitoreo y recuperación ante desastres de una infraestructura de 5 servidores. Alineado a <strong>CIS Controls&nbsp;v8</strong>, con registro abierto de hallazgos y gaps de gobierno.</p>
+    <div class="meta-row">
+      <span class="chip"><span class="dot"></span>Compilado <b>2026-07-18</b> · estado al <b>2026-07-23</b></span>
+      <span class="chip">Responsable técnico <b>mfourgeaux@axiomacloud.com</b></span>
+      <span class="chip"><b>5</b> servidores</span>
+      <span class="chip"><b>14</b> hallazgos · <b>10</b> gaps</span>
+      <span class="chip"><b>10</b> cerrados · <b>2</b> parciales · <b>1</b> bloqueado · <b>1</b> pendiente</span>
+      <span class="chip">Marco <b>CIS v8</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+  <nav class="toc" aria-label="Índice del dossier">
+    <p class="toc-h">Contenido</p>
+    <ol>
+      <li><a href="#s1"><span class="n">1</span><span>Resumen ejecutivo</span></a></li>
+      <li><a href="#s2"><span class="n">2</span><span>Alcance</span></a></li>
+      <li><a href="#s3"><span class="n">3</span><span>Inventario de activos</span></a></li>
+      <li><a href="#s4"><span class="n">4</span><span>Arquitectura</span></a></li>
+      <li><a href="#s5"><span class="n">5</span><span>Controles CIS v8</span></a></li>
+      <li><a href="#s6"><span class="n">6</span><span>RPO/RTO y recuperación</span></a></li>
+      <li><a href="#s7"><span class="n">7</span><span>Registro de hallazgos</span></a></li>
+      <li><a href="#s8"><span class="n">8</span><span>Gaps de gobierno</span></a></li>
+    </ol>
+    <button class="theme-toggle" id="themeBtn" type="button" aria-label="Cambiar tema">
+      <span id="themeIcon">◐</span><span id="themeLabel">Tema</span>
+    </button>
+  </nav>
+
+  <main>
+
+    <!-- 1 -->
+    <section class="block" id="s1">
+      <div class="sec-head"><span class="sec-num">§1</span><h2>Resumen ejecutivo</h2></div>
+      <div class="exec">
+        <span class="flag">Postura general</span>
+        <p>La infraestructura Axioma (5 VPS en múltiples proveedores) tiene una <strong>postura de seguridad base sólida y verificada</strong> — los tres riesgos críticos de superficie de ataque (acceso SSH, firewall, credenciales de backup expuestas) fueron cerrados en los 5 servers el <strong>2026-07-17</strong> — y una <strong>capacidad de recuperación de datos probada</strong> mediante backups dual-repo cifrados off-site (pgBackRest → dev-1 SSH + Cloudflare R2) con restore drills que validan recuperación con WAL replay hasta minutos antes de un evento.</p>
+        <p>En la pasada de remediación del 19–20 de julio se cerraron además la exposición de credenciales R2 en respaldos (H03), la cadencia de restore drills con las <strong>3 stanzas productivas en PASS</strong> (H07), parte del rebindeo de servicios a loopback (H04) y la remediación de dependencias vulnerables de hub <strong>desplegada a producción</strong> (H13: 61 → 11 vulnerabilidades, críticas 3 → 0, sin rollback). El <strong>2026-07-22</strong> se cerró el último hallazgo crítico de configuración: el <code>pg_hba</code> de axioma quedó acotado a loopback con <code>scram-sha-256</code> y 0 roles con hash md5 (H01). La brecha principal <strong>no es técnica sino de gobierno</strong>: al 2026-08-11 están <strong>los 10 documentos formales redactados</strong> (G1–G5 el 07-23: política de seguridad, roles/RACI, gestión de riesgos, gestión de vulnerabilidades y respuesta a incidentes; <strong>G6–G8 el 08-06</strong>: cadencias y libro de evidencia, rotación e inventario de secretos, clasificación de datos), todos pendientes de firma/aprobación y <strong>ninguno con evidencia de ejecución suficiente para cerrarse</strong> — los 8 siguen 🟡. Faltan <strong>G9 (BCP)</strong> y <strong>G10 (verificación de remediaciones)</strong>, y quedan hallazgos técnicos de defensa en profundidad (apps Next.js aún en <code>0.0.0.0</code>, propiedad de archivos en una app productiva). La cobertura de monitoreo es amplia (Netdata Cloud multicapa en los 5) con notificaciones centralizadas.</p>
+        <div class="callout warn" style="border-left-width:6px">
+          <p><strong>⚠️ NOTA DE VIGENCIA — cambio sustancial el 2026-08-09.</strong> Este dossier se compiló y entregó <strong>leyendo el repositorio de documentación</strong>. El 2026-08-09 se ejecutó el <strong>primer relevamiento in-situ contra los servidores</strong> posterior a esa entrega, y el resultado obliga a leer con cuidado la versión anterior: <strong>tres afirmaciones del dossier resultaron falsas</strong> — no por error de redacción, sino porque describían el estado <em>documentado</em> y no el <em>real</em>.</p>
+          <table style="margin:12px 0">
+            <thead><tr><th>Lo que el dossier afirmaba</th><th>Lo verificado el 2026-08-09</th></tr></thead>
+            <tbody>
+              <tr><td>dattaweb: <em>"sin acceso a datos de aplicación, acotado a métricas SNMP"</em></td><td><strong>48 llaves suyas en la cuenta con <code>sudo</code> de dev-1</strong>, con uso confirmado en <code>auth.log</code> (R20)</td></tr>
+              <tr><td><em>"hay un solo <code>axio-db-agent</code>, en axioma"</em></td><td>Existe un <strong>segundo en clubix</strong>, activo desde el 2026-07-24 — un día después de la entrega</td></tr>
+              <tr><td>El <code>axio-db-agent</code> restringe el acceso por <code>BLOCKED_TABLES</code></td><td>El blocklist es genérico y <strong>no incluye ninguna tabla clínica</strong> (R14)</td></tr>
+            </tbody>
+          </table>
+          <p>A eso se suma la <strong>pérdida de la clave age</strong> (R17), que dejó inejecutable la recuperación de aplicaciones. <strong>Cuatro dominios pasan a rojo</strong>: Seguridad/Hardening, DRP, Gestión de secretos y Gobierno.</p>
+          <p>La conclusión metodológica es la más importante: <strong>la documentación no puede auditarse a sí misma.</strong> Todo el marco G1–G8 se construyó desde el repo y por eso era preciso sobre lo escrito y ciego sobre lo que había cambiado. Las cadencias que lo habrían detectado —<strong>C4</strong> (auditoría de accesos) y <strong>C10</strong> (revisión del inventario de secretos)— existían en G6 y <strong>no se habían ejecutado nunca</strong>. Se ejecutaron por primera vez el 2026-08-09 y encontraron los cuatro hallazgos en las primeras horas.</p>
+        </div>
+        <div class="callout warn">
+          <p><strong>Nota de transparencia para el auditor.</strong> El hallazgo H06 (permisos de <code>.env</code>) fue declarado cerrado el 2026-07-18 y <strong>reabierto el 2026-07-20</strong>: la verificación original era insuficiente (se validó un solo server y contra el proceso ya en ejecución, en vez de contra el próximo arranque y en los 5 servers), y un cierre posterior derivado de ese criterio provocó un <strong>incidente en producción</strong>. El criterio de verificación fue corregido y la re-auditoría en los 5 servers detectó exposiciones que el cierre original no había visto (ver §7 y §7.1). Se deja registrado deliberadamente: la capacidad de detectar y revertir un falso verde es parte de la evidencia de control.</p>
+        </div>
+      </div>
+
+      <h3>Madurez por dominio</h3>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>Verde · operativo y verificado</span>
+        <span><i style="background:var(--warn)"></i>Amarillo · parcial / pendientes menores</span>
+        <span><i style="background:var(--crit)"></i>Rojo · gap a cubrir</span>
+      </div>
+      <div class="grid-mat">
+        <article class="mat-card r">
+          <div class="mat-top"><span class="mat-dom">Seguridad / Hardening</span><span class="light r">Rojo</span></div>
+          <p class="mat-body">Lo ya logrado sigue en pie: críticos cerrados en los 5 (SSH sin root/pass, ufw default-deny, token R2 rotado), respaldos con credenciales purgados (H03) y pg_hba de axioma en loopback + scram (H01, 07-22). Pendientes previos: 5 apps Next.js en <code>0.0.0.0</code> (H04) y propiedad de archivos de mini/axioma (H06). ⚠️ <b>Bajado de amarillo a rojo el 2026-08-09</b>, tras el <b>primer relevamiento in-situ posterior a la compilación del dossier</b>: <b>48 llaves del proveedor de hosting en la cuenta con <code>sudo</code> de dev-1</b>, con uso confirmado en <code>auth.log</code> (<b>R20</b>); ~43 llaves suyas en <code>root</code> de axioma/clubix/dev-1, hoy inertes por <code>PermitRootLogin no</code> pero nunca inventariadas (<b>R19</b>); y un <code>99-temp-password-axiomacloud.conf</code> <b>escrito y nunca aplicado</b> en los 4 servers, que encendería password auth en el próximo reload (<b>R18</b>). Ver <code>hardening.md</code> §11.</p>
+        </article>
+        <article class="mat-card g">
+          <div class="mat-top"><span class="mat-dom">Monitoreo</span><span class="light g">Verde</span></div>
+          <p class="mat-body">Netdata Cloud v2.10.4 claimed en los 5; colectores PG/nginx/httpcheck/apps + alarmas custom; notificaciones Telegram+Email. La alarma de antigüedad de backup pgBackRest se verificó <strong>desplegada y en CLEAR</strong> desde 2026-05-26 (H08 cerrado 07-18). Rotación de logs PM2 desplegada en los 5 (07-20).</p>
+        </article>
+        <article class="mat-card g">
+          <div class="mat-top"><span class="mat-dom">Backup</span><span class="light g">Verde</span></div>
+          <p class="mat-body">Dual-repo pgBackRest 2.58.0: repo1 SSH dev-1 + repo2 R2 <strong>cifrado</strong> off-site; retención full=4/diff=7; cron full/diff/incr; <code>verify</code> disponible.</p>
+        </article>
+        <article class="mat-card y">
+          <div class="mat-top"><span class="mat-dom">DRP (recuperación)</span><span class="light y">Amarillo</span></div>
+          <p class="mat-body">⬆️ <strong>Subido de rojo a amarillo el 2026-08-12.</strong> DRP de DB formal + restore drills con las 3 stanzas en PASS (07-19). ✅ <strong>El DRP de aplicación —redactado desde 2026-07-18 y nunca ejecutado— se ejecutó y funcionó</strong>: <b>hub y alvera recuperadas en axioma-drp</b>, en paralelo, hasta login funcional. ✅ <strong>R21 cerrado</strong>: baehost habilitó 80/443 y ambas apps responden por internet, con control negativo OK (5432, 5300 y 19999 cerrados). ✅ <strong>Ventaja estructural registrada</strong>: el servidor de recuperación está en <b>otro proveedor</b> (baehost) que el de producción (donweb), y los backups en un tercero (R2). ✅ <strong>Legibilidad de datos cifrados verificada</strong> (R15 → verde): tras el restore, los campos cifrados de <code>mediflow_db</code> <b>se leen en claro</b>. <strong>Pendiente para verde:</strong> sostener la cadencia mensual de drills (R11); y ejecutar el runbook con las apps restantes.</p>
+        </article>
+        <article class="mat-card r">
+          <div class="mat-top"><span class="mat-dom">Gestión de secretos</span><span class="light r">Rojo</span></div>
+          <p class="mat-body"><b>Bajado de verde a rojo el 2026-08-09</b>, en dos pasos y por dos motivos distintos. <b>(1) Cobertura:</b> el inventario desagregado (G7 §3.2, S01–S18 sobre los <b>16</b> <code>.env</code>) encontró 3 clases de secreto que la política no cubría — claves de cifrado de datos en reposo de la base 🔴 (S15), contraseñas de cuentas de SO (S16) y claves de proveedores de IA (S17) — y corrigió una atribución errónea (S12/S18). <b>(2) Custodia — lo determinante:</b> la <b>clave privada age se perdió</b> (no está en el equipo de trabajo ni en el gestor de contraseñas). Ningún secreto se perdió, porque los valores viven en los <code>.env</code> de cada server; lo que se perdió es la <b>capacidad de descifrar el repo</b>, que queda como 16 archivos ilegibles. Deja <b>inejecutables</b> el Paso 5 del DRP de aplicación y la Fase 7 del estándar de despliegue. La custodia figuraba como "verificada" sin evidencia de verificación — <b>segundo falso verde del marco después de H06</b>. Riesgo <b>R17</b> (materializado), compuesto con <b>R15</b>: si se pierde axioma antes de reconstituir el repo, <code>mediflow_db</code> queda permanentemente ilegible aun restaurando de backup. <i>Acción A9 de G7, prioridad máxima.</i></p>
+        </article>
+        <article class="mat-card y">
+          <div class="mat-top"><span class="mat-dom">Estandarización</span><span class="light y">Amarillo</span></div>
+          <p class="mat-body">Estándar oficial v1 + inventario cerrado + fases 0–3 completas. Fases invasivas (4+) en curso: hub estandarizada; resto de apps pendiente.</p>
+        </article>
+        <article class="mat-card r">
+          <div class="mat-top"><span class="mat-dom">Gobierno / Documentación</span><span class="light r">Rojo</span></div>
+          <p class="mat-body">Al 2026-08-11, <b>los 10</b> documentos redactados (G1–G5 el 07-23: política de seguridad, matriz de roles/RACI, registro de riesgos, gestión de vulnerabilidades/parches y respuesta a incidentes; <b>G6–G8 el 08-06</b>: cadencias y libro de evidencia, rotación e inventario de secretos <b>S01–S18</b>, clasificación de datos), todos pendientes de firma/aprobación. <b>Sigue en rojo y no en amarillo</b> porque ningún gap acumula todavía la evidencia de ejecución que sus propias secciones de gobierno exigen: los 8 están 🟡. Faltan G9 (BCP) y G10. Ver §8.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="block" id="s2">
+      <div class="sec-head"><span class="sec-num">§2</span><h2>Alcance</h2></div>
+      <h3>Cubre</h3>
+      <ul class="tick">
+        <li><strong>5 servidores VPS</strong>: axioma, clubix, axiodemo, dev-1, axioma-drp.</li>
+        <li><strong>Controles de seguridad de host</strong>: acceso SSH, firewall (ufw), fail2ban, <code>pg_hba</code>/autenticación PostgreSQL, TLS y cabeceras HTTP, permisos de configuración/secretos, protección anti-scanner nginx.</li>
+        <li><strong>Backup y recuperación de bases</strong> PostgreSQL (pgBackRest dual-repo) y <strong>recuperación de aplicaciones</strong> (DRP de app en definición).</li>
+        <li><strong>Monitoreo y alertas</strong> (Netdata Cloud + colectores + alarmas custom).</li>
+        <li><strong>Gestión de secretos</strong> (SOPS + age) y <strong>estandarización de despliegues</strong> de aplicaciones propias.</li>
+      </ul>
+      <h3>No cubre (fuera de alcance / no documentado)</h3>
+      <ul class="plain">
+        <li>Seguridad de las aplicaciones a nivel de código (SAST/DAST, revisión de código, dependencias — solo se remedió <code>npm audit</code> en hub, H13; no hay proceso continuo para el resto de las apps).</li>
+        <li>Seguridad física de los datacenters de los proveedores (Contabo, dattaweb, etc.).</li>
+        <li>Gestión de identidades/usuarios de las aplicaciones (autenticación de usuarios finales).</li>
+        <li>Continuidad de servicios que no son PostgreSQL ni apps Node (ej. Docker/CUPS en dev-1) más allá de su exposición de red.</li>
+        <li><strong>Gobierno formal</strong>: <strong>los 10 documentos redactados</strong> (G1–G5 el 2026-07-23, G6–G8 el 2026-08-06, G9–G10 el 2026-08-11), todos pendientes de firma/aprobación y <strong>ninguno con evidencia de ejecución suficiente</strong>. Cobertura documental completa; madurez de control no.</li>
+      </ul>
+    </section>
+
+    <!-- 3 -->
+    <section class="block" id="s3">
+      <div class="sec-head"><span class="sec-num">§3</span><h2>Inventario de activos</h2></div>
+      <h3>3.1 · Servidores</h3>
+      <div class="tbl-scroll">
+        <table class="wide">
+          <thead><tr><th>Server</th><th>IP</th><th>SSH</th><th>PG</th><th>Rol principal</th><th>Apps / servicios</th></tr></thead>
+          <tbody>
+            <tr><td><b>axioma</b></td><td class="num">66.97.45.210</td><td class="num">22 · 5408</td><td class="center num">14</td><td>DB producción principal + host multi-app</td><td>corporate (3005), checkpoint, elore (3700), evolution-api (8080), <b>hub</b> (5200/8089), mediflow (5300), mini (8095), parse (5100/8087)</td></tr>
+            <tr><td><b>clubix</b></td><td class="num">179.43.123.248</td><td class="num">2222</td><td class="center num">14</td><td>DB producción + app</td><td>clubix (5400)</td></tr>
+            <tr><td><b>axiodemo</b></td><td class="num">170.78.73.245</td><td class="num">22</td><td class="center num">16</td><td>DB demo + app</td><td>axio-backend (3001), axio-ml (8001, Python/uvicorn+ollama)</td></tr>
+            <tr><td><b>dev-1</b></td><td class="num">149.50.148.198</td><td class="num">22 · 5782</td><td class="center num">14</td><td><b>Repo host central pgBackRest</b> (repo1 + escritura R2) + multi-app</td><td>15+ apps Node de 8 usuarios, nginx, Docker, CUPS, postfix relay</td></tr>
+            <tr><td><b>axioma-drp</b></td><td class="num">170.78.75.249</td><td class="num">22</td><td class="center num">14</td><td>Banco de pruebas de DRP por aplicación (no productivo)</td><td>bare: SSH + Netdata + pgBackRest 2.58.0 (stanza AxiomaCloudProd en R2)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Node por server: axioma/clubix <b>v20.20.2</b>, axiodemo <b>v22.22.2</b>. pgBackRest <b>2.58.0</b> unificado en los 4 db/repo hosts. <strong>dev-1 es la caja más crítica</strong> — comprometerla compromete los backups de toda la infra (aloja <code>/backup/pgbackrest</code>).</p>
+
+      <h3>3.2 · Aplicaciones y bases de datos</h3>
+      <div class="tbl-scroll">
+        <table class="wide">
+          <thead><tr><th>App</th><th>Server</th><th>Owner</th><th>Puerto</th><th>Base</th><th>Estandarización</th></tr></thead>
+          <tbody>
+            <tr><td>axioma-corporate</td><td>axioma</td><td><span class="st part">backend root</span></td><td class="num">3005</td><td>axiomadocs</td><td>sacar de root (F5)</td></tr>
+            <tr><td>checkpoint</td><td>axioma</td><td><span class="st part">estático root</span></td><td>—</td><td>checkpoint_db</td><td>sacar de root (F5)</td></tr>
+            <tr><td>elore</td><td>axioma</td><td>eloreapp</td><td class="num">3700</td><td>elore_db</td><td>menor (F5); bloqueante F7</td></tr>
+            <tr><td>evolution-api</td><td>axioma</td><td>evolutionapp</td><td class="num">8080</td><td>evolution</td><td>setup separado (F6)</td></tr>
+            <tr><td><b>hub</b></td><td>axioma</td><td>hubapp</td><td class="num">5200 · 8089</td><td>hub_db</td><td><span class="st ok">estandarizada (F4)</span></td></tr>
+            <tr><td>mediflow</td><td>axioma</td><td>mediflowapp</td><td class="num">5300</td><td>mediflow_db</td><td>casi estándar</td></tr>
+            <tr><td>mini</td><td>axioma</td><td>miniapp</td><td class="num">8095</td><td>mini_db</td><td>owner ✅; <code>.cjs</code>→<code>.js</code> pend.</td></tr>
+            <tr><td>parse</td><td>axioma</td><td>parseapp</td><td class="num">5100 · 8087</td><td>parse_db</td><td><span class="st ok">estándar</span></td></tr>
+            <tr><td>clubix</td><td>clubix</td><td>clubixapp</td><td class="num">5400</td><td>clubix_db</td><td>casi estándar</td></tr>
+            <tr><td>axio-backend</td><td>axiodemo</td><td>axioapp</td><td class="num">3001</td><td>axio_db</td><td>molde común (F6)</td></tr>
+            <tr><td>axio-ml</td><td>axiodemo</td><td><span class="st part">axiomacloud</span></td><td class="num">8001</td><td>—</td><td>hook ollama + owner (F6)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Dadas de baja en Fase 1 (2026-07-05): <b>AxiomaWeb</b> (sin DB) y <b>rendiciones</b> (+ DROP de <code>rendiciones_db</code>), con backup previo.</p>
+
+      <h3>3.3 · Bases por stanza pgBackRest <span style="color:var(--ink-faint);font-weight:400">(Apéndice A del DRP, 2026-07-04)</span></h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Stanza</th><th>Server</th><th>PG</th><th># bases</th><th>Bases principales (tamaño aprox.)</th></tr></thead>
+          <tbody>
+            <tr><td><b>AxiomaCloudProd</b></td><td>axioma</td><td class="center num">14</td><td class="center num">11</td><td>mini_db (113M), parse_db (77M), mediflow_db (18M), elore_db (13M), <b>hub_db (12–15M)</b>, axiomadocs (11M), chequescloud (11M), iasqlassistant_db (10M), checkpoint_db (10M), evolution (10M), core_db (8.6M)</td></tr>
+            <tr><td><b>clubix</b></td><td>clubix</td><td class="center num">14</td><td class="center num">1</td><td>clubix_db (198M) — producción real</td></tr>
+            <tr><td><b>axiodemo</b></td><td>axiodemo</td><td class="center num">16</td><td class="center num">2</td><td>axio_db (8.9M), axio_ml (11M)</td></tr>
+            <tr><td><b>dev-1</b></td><td>dev-1</td><td class="center num">14</td><td class="center num">16</td><td>clubix_db (171M, copia), mini_db (89M), rojoplus_db (68M), parse_db (28M), mediflow_db (20M), axioma_erp (17M), hub_db (17M), elore_db (14M), + 8 más</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">Advertencia de auditoría: <code>clubix_db</code> existe en 2 stanzas (clubix = producción real; dev-1 = copia) con tamaños distintos → en un restore selectivo hay que definir la stanza. El Apéndice A se regenera con el comando documentado antes de confiar en él para un restore.</p>
+    </section>
+
+    <!-- 4 -->
+    <section class="block" id="s4">
+      <div class="sec-head"><span class="sec-num">§4</span><h2>Arquitectura</h2></div>
+      <h3>4.1 · Monitoreo — Netdata Cloud (sin server central)</h3>
+      <ul class="plain">
+        <li><strong>Netdata v2.10.4</strong> instalado y claimed a Netdata Cloud en los 5 servers (axioma-drp sumado 2026-07-17).</li>
+        <li><strong>Sin servidor central que mantener</strong>: cada agente sale outbound por HTTPS/443 hacia Netdata Cloud. Un firewall default-deny inbound no lo afecta (el <code>:19999</code> no se abre; reporta saliente).</li>
+        <li><strong>Notificaciones centralizadas</strong> en la nube: Telegram (critical+warning) + Email (critical), a <code>martin4yo@gmail.com</code>.</li>
+        <li><strong>Colectores</strong>: <code>go.d/postgres</code> (read-only con <code>pg_monitor</code>), <code>go.d/nginx</code>, <code>go.d/httpcheck</code>, <code>apps.plugin</code> (pm2/Node/Python).</li>
+        <li><strong>Alarmas custom versionadas</strong> en <code>netdata/health.d/</code>: <code>apps_http.conf</code> (endpoint caído/lento), <code>pgbackrest.conf</code> (antigüedad backup &gt;25h/48h, fallo, WAL atrasado por stanza).</li>
+      </ul>
+      <h3>4.2 · Backup — dual-repo pgBackRest</h3>
+      <div class="diagram"><pre>                 repo central /backup/pgbackrest  (usuario OS: pgbackrest)
+        backup pull ─────►  dev-1 (149.50.148.198)  ◄───── archive-push (WAL)
+                                    │ SSH
+        ┌───────────────────────────┼───────────────────────────┐
+        ▼                           ▼                            ▼
+   axioma (PG14)              clubix (PG14, :2222)        axiodemo (PG16)
+   stanza AxiomaCloudProd     stanza clubix               stanza axiodemo
+   dev-1 respalda su propia DB vía SSH loopback → stanza dev-1
+   + en cada operación escribe TAMBIÉN a repo2 → Cloudflare R2 (S3, off-site, CIFRADO)</pre></div>
+      <ul class="plain">
+        <li><strong>repo1</strong> — central en dev-1 (<code>/backup/pgbackrest</code>), transporte SSH, sin cifrado en reposo (tránsito cifrado por SSH).</li>
+        <li><strong>repo2</strong> — Cloudflare R2 (bucket <code>axiomacloud-pgbackrest</code>), cifrado AES-256-CBC en reposo (<code>repo2-bundle=y</code>). Elimina el single-point-of-failure de dev-1.</li>
+        <li><strong>Retención</strong> full=4, diff=7 en ambos repos. <strong>Cron (dev-1)</strong>: full domingos, diff lun-sáb, incr cada 4h, check semanal; stanzas escalonadas de a 15 min.</li>
+        <li><strong>RPO efectivo</strong> 4 horas (frecuencia del incr). El drill valida WAL replay hasta &lt;30 min antes del evento.</li>
+      </ul>
+    </section>
+
+    <!-- 5 -->
+    <section class="block" id="s5">
+      <div class="sec-head"><span class="sec-num">§5</span><h2>Dominios de control · CIS Controls v8</h2></div>
+      <p class="sub">Estado por control: <span class="st ok">implementado</span> · <span class="st part">parcial</span> · <span class="st gap">gap</span>. Los controles se ordenan por implementación; CIS 7 y 17 (con política/plan ya redactados en §8, pendientes de proceso y aprobación) cierran la tabla.</p>
+      <div class="tbl-scroll">
+        <table class="wide">
+          <thead><tr><th>CIS v8</th><th>Qué implementa la infra</th><th>Evidencia</th><th>Estado</th></tr></thead>
+          <tbody>
+            <tr><td><b>1</b> · Inventario de activos</td><td>Inventario cerrado de 5 servers + apps + bases por stanza</td><td class="mono">plan §2; DRP Apéndice A</td><td><span class="st ok">✓</span></td></tr>
+            <tr><td><b>2</b> · Inventario de software</td><td>Apps por server + versión Node por app; PG/pgBackRest unificados</td><td class="mono">estandar §10; plan §2</td><td><span class="st part">manifiestos F7</span></td></tr>
+            <tr><td><b>3</b> · Protección de datos</td><td>pgBackRest repo2 R2 cifrado AES-256; SOPS+age para <code>.env</code>; TLS Let's Encrypt. <b>G7 (08-06) + inventario desagregado (08-09)</b>: <b>S01–S18</b> sobre los 16 <code>.env</code> + frecuencia de rotación + 3 excepciones razonadas (S01 por evento, S02 no rota, S15 es migración de datos). <b>G8 (08-06, ampliado 08-09)</b>: 4 niveles de clasificación, clasificación por base de las 4 stanzas, mapa de terceros y <b>2 canales de datos antes no contemplados</b> (<code>axio-db-agent</code> → 4 bases productivas; proveedores de IA)</td><td class="mono">pgbackrest-setup; plan §3; gobierno/g7, g8</td><td><span class="st part">residual en <code>.conf</code> · H03 cerrado · 3 clases de secreto nuevas (S15/S16/S17) · clasificación provisional · R14, R15, R16</span></td></tr>
+            <tr><td><b>4</b> · Configuración segura</td><td>SSH sin root/pass (5/5); ufw default-deny (5/5); <code>.env</code> 600; PG loopback; <b>pg_hba de axioma acotado a loopback + scram</b> (H01 cerrado 07-22); anti-scanner; <b>regla de propiedad de archivos</b> (<code>/var/www/&lt;app&gt;</code> todo <code>&lt;app&gt;app</code>)</td><td class="mono">hardening; estandar §3</td><td><span class="st part">H04 parc. · H06 parc.</span></td></tr>
+            <tr><td><b>5</b> · Gestión de cuentas</td><td>Usuario dedicado <code>&lt;app&gt;app</code> (no root); <code>linuxadmin</code> bloqueado en drp; <b>regla de propiedad en DB</b> (<code>&lt;app&gt;user</code> owner de todos los objetos)</td><td class="mono">estandar §2, §9; gobierno/g7, g6 §5</td><td><span class="st part">axio-ml · matriz · rotación S04/S05 pendiente · auditoría de accesos C4 sin ejecuciones</span></td></tr>
+            <tr><td><b>6</b> · Gestión de accesos</td><td>SSH solo por pubkey (5/5); CA Smallstep en dev-1; pg_hba de axiodemo restringido a IP de dev-1</td><td class="mono">hardening §3; pgbackrest-setup</td><td><span class="st ok">✓ host</span></td></tr>
+            <tr><td><b>8</b> · Logs de auditoría</td><td>fail2ban en los 5 (backend=systemd donde aplica); access.log nginx; anti-scanner filtra ruido; journald</td><td class="mono">hardening; nginx-anti-scanner</td><td><span class="st part">sin agregación central</span></td></tr>
+            <tr><td><b>11</b> · Recuperación de datos</td><td>DRP de DB (4 escenarios, RPO/RTO); restore drill con WAL replay auto-evaluante + CSV; <code>verify</code></td><td class="mono">disaster-recovery-plan; drill-history</td><td><span class="st ok">✓ 3 stanzas PASS (H07)</span></td></tr>
+            <tr><td><b>12</b> · Infra de red</td><td>ufw default-deny allowlist SSH/80/443 (5/5); snmpd acotado a IPs dattaweb en dev-1</td><td class="mono">hardening §2 + comparativa</td><td><span class="st part">Next.js en 0.0.0.0 · H04 parc.</span></td></tr>
+            <tr><td><b>13</b> · Monitoreo y defensa</td><td>Netdata Cloud multicapa (5/5); alarmas custom apps_http + pgbackrest; Telegram/Email</td><td class="mono">README; setup-netdata-cloud</td><td><span class="st ok">✓ (H08 cerrado)</span></td></tr>
+            <tr><td><b>7</b> · Gestión de vulnerabilidades</td><td>Remediación de hub desplegada y verificada (61 → 11 vulns, críticas 3 → 0, 57/57 tests PASS, 2026-07-20). <code>unattended-upgrades</code> operativo en los 5. Política G4 redactada. <b>Primer ciclo completo de escaneo el 2026-08-09</b> (cadencia C3): 42 proyectos en 4 servidores → <b>producción, solo runtime: 8 críticas · 154 altas · 107 medias</b>. De 73 paquetes crít./altos distintos, <b>53 con fix semver-compatible</b>, 17 con salto mayor, 3 sin solución upstream. Peor caso <code>clubix/server</code> (4 críticas, 30 altas, única app con pasarela de pago viva). <b>Los 4 servidores requieren reboot</b>: el parcheo automático descarga todo pero nadie reinicia, y kernels y <code>libc6</code> quedan instalados sin activar</td><td class="mono">plan-remediacion (H13); gobierno/g4; relevamiento-vulnerabilidades-2026-08-09</td><td><span class="st gap">🔴 8 críticas en producción · proceso 1 de 2 ciclos</span></td></tr>
+            <tr><td><b>17</b> · Respuesta a incidentes</td><td>Flujo de comunicación en el DRP + <b>IR plan formal e independiente redactado</b> (G5, 07-23): ciclo NIST/CIS-17, clasificación SEV-1…4, contactos y post-mortem. Pendiente de aprobación y de un simulacro anual</td><td class="mono">gobierno/g5; drp §3</td><td><span class="st part">plan redactado · pend. aprobación</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="block" id="s6">
+      <div class="sec-head"><span class="sec-num">§6</span><h2>RPO/RTO y capacidad de recuperación</h2></div>
+      <h3>6.1 · Objetivos (DRP de DB)</h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Tier</th><th>Servicio</th><th>RPO</th><th>RTO</th></tr></thead>
+          <tbody>
+            <tr><td><span class="st gap">Crítico</span></td><td>AxiomaCloudProd, clubix</td><td class="num">4 h</td><td class="num">30 min</td></tr>
+            <tr><td><span class="st part">No crítico</span></td><td>axiodemo</td><td class="num">4 h</td><td class="num">60 min</td></tr>
+            <tr><td><span class="st na">Infraestructura</span></td><td>dev-1 (repo host)</td><td class="num">4 h</td><td class="num">45 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">RPO efectivo 4 h (frecuencia del incr). RTO referencia: 15–30 min bases chicas (repo1 red local); 30–60 min desde R2 (egress WAN).</p>
+
+      <h3>6.2 · Escenarios de DRP de base de datos</h3>
+      <div class="tbl-scroll">
+        <table class="wide">
+          <thead><tr><th>Esc.</th><th>Descripción</th><th>Fuente de restore</th><th>RTO</th></tr></thead>
+          <tbody>
+            <tr><td class="center"><b>A</b></td><td>Corrupción de datos en un db host</td><td>repo1 (o repo2 si dev-1 caído)</td><td class="num">15–30 min</td></tr>
+            <tr><td class="center"><b>B</b></td><td>Pérdida total de un db host</td><td>repo1 → repo2 fallback</td><td class="num">30–45 min</td></tr>
+            <tr><td class="center"><b>C</b></td><td>Pérdida de dev-1 (repo host)</td><td>repo2 (R2)</td><td class="num">45–60 min</td></tr>
+            <tr><td class="center"><b>D</b></td><td>Pérdida simultánea dev-1 + db host (peor caso)</td><td>repo2 (R2)</td><td class="num">60–90 min</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>6.3 · DRP de aplicación <span style="color:var(--warn);font-weight:600;font-size:13px">— en definición, aún NO ejecutado</span></h3>
+      <ul class="plain">
+        <li>Piloto en curso: <strong>restaurar hub en axioma-drp</strong> (código + build + PM2/systemd + vhost nginx + <code>hub_db</code> desde backup) como ensayo de disaster recovery de aplicación. Runbook mapeado a los 9 pasos del <code>lib-redeploy</code>.</li>
+        <li><strong>Matriz de 4 escenarios</strong> de menor a mayor alcance: (1) solo la base — restore quirúrgico; (2) solo la app — redeploy con base sana; (3) app entera = app + base (<b>este drill</b>); (4) servidor entero. Los escenarios 1 y 2 tienen runbooks propios (secciones E y F), reutilizables por cualquier app.</li>
+        <li>Estado: <strong>relevamiento in-situ completo</strong> (destino mapeado — PG14 + pgBackRest ya ven la stanza <code>AxiomaCloudProd</code> en R2; faltan Node/PM2/nginx y el usuario <code>hubapp</code>) + plan de 9 pasos con red de seguridad y decisiones abiertas (G3: PGDATA aislado vs. PG principal; G4: <code>/etc/hosts</code>+cert self-signed; G8: crear rol <code>hubuser</code> que el <code>pg_dump</code> no trae). <strong>Todos los pasos invasivos siguen pendientes</strong>, a la espera de OK y de acordar G3/G4.</li>
+      </ul>
+
+      <h3>6.4 · Evidencia de drills ejecutados</h3>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Fecha</th><th>Stanza</th><th>Repo</th><th>Restore</th><th>WAL lag</th><th>Resultado</th></tr></thead>
+          <tbody>
+            <tr><td class="num">2026-05-29</td><td>axiodemo</td><td>repo2</td><td class="num">14 s</td><td class="num">1 min</td><td><span class="st ok">PASS</span></td></tr>
+            <tr><td class="num">2026-07-04</td><td>axiodemo</td><td>R2 (repo1 local)</td><td class="num">15 s</td><td class="num">0 min</td><td><span class="st ok">PASS</span></td></tr>
+            <tr><td class="num">2026-07-04 ×2</td><td>axiodemo</td><td>R2</td><td class="num">13–15 s</td><td class="num">0 min</td><td><span class="st ok">PASS</span></td></tr>
+            <tr><td class="num">2026-07-19 12:26 / 12:51</td><td>AxiomaCloudProd · clubix</td><td>R2</td><td class="num">49–79 s</td><td class="num">—</td><td><span class="st gap">FAIL (bug del drill)</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td><b>AxiomaCloudProd</b></td><td>R2</td><td class="num">71 s</td><td class="num">0 min</td><td><span class="st ok">PASS · 1ª corrida</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td><b>clubix</b></td><td>R2</td><td class="num">44 s</td><td class="num">1 min</td><td><span class="st ok">PASS · 1ª corrida</span></td></tr>
+            <tr><td class="num">2026-07-19 20:08</td><td>axiodemo</td><td>R2</td><td class="num">11 s</td><td class="num">1 min</td><td><span class="st ok">PASS</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note">El drill valida end-to-end: descarga R2 → descifrado AES → descompresión → <b>WAL replay completo</b> → promoción, con umbral de frescura de 30 min. Auto-evaluante (<code>exit 0/1</code>), registro automático en <code>drill-history.csv</code>.</p>
+      <div class="find m" style="margin-top:14px">
+        <div class="stripe"></div>
+        <div class="fbody">
+          <div class="fhead"><span class="fid">H07</span><span class="ftitle">Cobertura de drills — cerrado, con nota sobre los FAIL</span></div>
+          <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — AxiomaCloudProd y clubix tienen ahora su <strong>primera corrida registrada en PASS</strong>, junto a axiodemo. <b>Los 4 FAIL del mismo día quedan deliberadamente en el registro:</b> la causa fue un <strong>defecto del script de drill, no de los backups</strong> — el <code>pg_hba</code> del entorno de restore se copiaba del cluster local (con <code>scram</code>), provocando rechazo por autenticación, y la comprobación de conectividad no esperaba al WAL replay. Corregido y re-ejecutado a las 20:08 con las 3 stanzas en PASS. Los backups nunca estuvieron comprometidos; lo que falló fue el instrumento de verificación. <b>Compromiso vivo:</b> sostener la cadencia mensual.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section class="block" id="s7">
+      <div class="sec-head"><span class="sec-num">§7</span><h2>Registro de hallazgos y remediación</h2></div>
+      <p class="sub">Severidad <span class="sev h">ALTA</span> <span class="sev m">MEDIA</span> <span class="sev l">BAJA</span> · exponer los pendientes es señal de madurez. Owner por defecto <code>mfourgeaux@axiomacloud.com</code> (responsable único — ver gap G2).</p>
+
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H01</span><span class="ftitle"><code>pg_hba.conf</code>: <code>host all all 0.0.0.0/0 md5</code></span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4 · 6</span><span class="tag">axioma</span><span class="tag">Alta → Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-22</span> — la regla <code>0.0.0.0/0</code> fue eliminada (queda comentada como evidencia) y todas las reglas <code>host</code> quedaron acotadas a <code>127.0.0.1/32</code>/<code>::1/128</code> con <code>scram-sha-256</code>; <code>password_encryption = scram-sha-256</code> y <strong>0 roles con hash md5</strong> (todos re-hasheados). Aplicado con backup previo (<code>pg_hba.conf.bak-20260722-100113</code>) y <code>pg_reload_conf()</code>, sin restart. Verificado post-cambio: todas las apps de axioma conectando por loopback (hub, mediflow, mini, parse, evolution, netdata), 0 auth failures en el log de PG. El residual inicial (2 reglas de <code>mediflow_db</code> con método <code>md5</code>) se cerró <strong>el mismo día</strong>: ambas migradas a <code>scram-sha-256</code> y verificada una <strong>conexión nueva</strong> de <code>mediflowuser</code> directa (<code>:5432</code>) y vía pgbouncer (<code>:6432</code>). <strong>0 líneas <code>md5</code> activas</strong> en el <code>pg_hba</code> de axioma — sin residual.</p>
+      </div></div>
+
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H02</span><span class="ftitle">Firewall ausente (ufw inactive)</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">axioma · clubix · dev-1 · drp</span><span class="tag">Alta</span></div>
+        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-17</span> — ufw default-deny + allowlist en los 5 (axiodemo ya lo tenía).</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H03</span><span class="ftitle">Credenciales R2 en texto plano en <code>pgbackrest.conf</code></span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3</span><span class="tag">dev-1 · axioma · clubix · axiodemo · drp</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — token rotado el 07-17 (viejo borrado en Cloudflare, nuevo en 5 archivos, verificado con <code>pgbackrest check</code>; custodia SOPS). El relevamiento del 07-19 mostró que los <code>.conf</code> vivos ya estaban en <code>640</code>+owner correcto y que la superficie real eran <strong>4 <code>.bak</code> con credenciales pre-rotación</strong>: respaldados en un tar <code>600</code> root-only y borrados los 4 (+2 residuos). Resultado: <b>0 <code>.bak</code> en los 5 servers</b>, <code>check</code> OK en las 4 stanzas, ningún <code>.conf</code> vivo tocado. <strong>Residual aceptado</strong>: las credenciales siguen en claro en los <code>.conf</code> que pgBackRest debe leer (limitación del producto), mitigado por <code>640</code> + owner + firewall.</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H04</span><span class="ftitle">Puertos de app en <code>0.0.0.0</code> en vez de <code>127.0.0.1</code></span></div>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">parcial</span></div>
+        <p class="fdesc"><span class="st part">◐ parcial 2026-07-20</span> — el relevamiento confirmó que <strong>todos los <code>proxy_pass</code> ya apuntan a loopback</strong> (el riesgo principal no existía). <b>En verde:</b> <code>:8087</code> parse-front (axioma) → loopback; <strong>CUPS <code>:631</code> deshabilitado</strong> en dev-1 (nadie imprime); netdata <code>:19999</code> → <code>bind to = 127.0.0.1</code> en los 3, con ACLK intacto. <b>Bloqueadas 5 apps Next.js:</b> el flag <code>-H</code> bindea correctamente pero hace que Next redirija el login a <code>https://localhost:&lt;port&gt;</code> → revertido de inmediato en producción; <code>HOSTNAME</code> es inerte fuera de standalone. Sigue <strong>mitigado por ufw</strong>, que tapa esos puertos desde afuera.</p>
+      </div></div>
+
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H05</span><span class="ftitle">SSH con <code>PermitRootLogin yes</code> + <code>PasswordAuthentication yes</code></span></div>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 6</span><span class="tag">axioma · clubix · dev-1 · axiodemo</span><span class="tag">Alta</span></div>
+        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-17</span> — root+pass <code>no</code>, solo pubkey, en los 5 (drop-in <code>00-hardening</code>).</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H06</span><span class="ftitle"><code>.env</code> con permisos laxos (777/664/644/755) en vez de 600</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 4</span><span class="tag">axioma · dev-1 · axiodemo</span><span class="tag">Media</span><span class="tag">REABIERTO</span></div>
+        <p class="fdesc"><span class="st gap">⚠ reabierto 2026-07-20</span> — el cierre del 07-18 fue un <strong>falso verde</strong>: se verificó un solo server y contra el proceso ya en ejecución, y un cierre derivado del mismo criterio provocó un <strong>incidente en producción</strong> (~1 min de caída, resuelto por rollback). Ver §7.1. <b>Cerrado tras la re-auditoría en los 5 servers:</b> <code>axio/.env</code> en dev-1 (7 archivos en <code>664</code> world-readable → <code>600 axioapp:axioapp</code>; los leían los 8 usuarios de apps del server, control negativo <code>hubapp</code> NO_LEE); <strong>mini/dev-1 migrada a <code>miniapp</code></strong> con ~90 directorios <code>777</code> → <code>750</code>/<code>755</code>, <code>find -not -user miniapp</code> vacío y health 200; mini/axioma backend <code>.env</code> → <code>600 miniapp:miniapp</code>. <b>Pendiente:</b> el <code>chown -R</code> del árbol de mini en axioma <strong>requiere ventana</strong> (server productivo) — magnitud relevada el 07-22: <strong>~83.000 archivos</strong> con owner ≠ <code>miniapp</code>.</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H07</span><span class="ftitle">Cadencia mensual de restore drills no sostenida</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 11</span><span class="tag">infra (backup)</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-19</span> — las <strong>3 stanzas productivas en PASS</strong> (585 / 178 / 34 tablas restauradas, WAL al día); primera corrida registrada de AxiomaCloudProd y clubix. Los FAIL previos del mismo día se diagnosticaron como <strong>bug del drill, no de los backups</strong> (<code>pg_hba</code> con <code>scram</code> copiado del cluster local + chequeo que no esperaba el replay); <code>70-restore-drill.sh</code> corregido y re-ejecutado. <strong>Compromiso vivo</strong>: sostener la cadencia mensual — un ciclo no constituye cadencia.</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H08</span><span class="ftitle">Alarma de antigüedad de backup pgBackRest no desplegada</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 11 · 13</span><span class="tag">dev-1</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ cerrado 2026-07-18</span> — el hallazgo era <strong>incorrecto</strong>: el monitoreo ya estaba desplegado en dev-1 desde el <b>2026-05-26</b> (colector <code>pgbackrest-collect.py</code> + cron cada 15 min + <code>health.d</code> + <code>statsd.d</code>), con charts poblados y alarmas en CLEAR. Solo se reconcilió el colector del repo con la versión multi-repo del server (md5 idéntica); <strong>sin tocar dev-1</strong>.</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H09</span><span class="ftitle">snmpd con community <code>public</code> y <code>agentaddress</code> público</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 4 · 12</span><span class="tag">dev-1</span><span class="tag">Media</span><span class="tag">bloqueado</span></div>
+        <p class="fdesc"><span class="st part">⏸ bloqueado por tercero (2026-07-19)</span> — el relevamiento confirmó que la community <code>public</code> ya está acotada por <code>com2sec</code> a 2 IPs de dattaweb, y <code>tcpdump</code> probó que <strong>el proveedor consulta cada ~1 s y snmpd responde</strong>: bindear a loopback o cambiar la community <strong>cortaría el monitoreo contratado</strong>. Requiere coordinar la nueva community con dattaweb. Mitigado por ufw (161 solo desde esas IPs).</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H10</span><span class="ftitle">Usuario ajeno de provisioning <code>linuxadmin</code></span></div>
+        <div class="fmeta"><span class="tag cis">CIS 5 · 6</span><span class="tag">axioma-drp</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ mitigado 2026-07-17</span> — <code>passwd -l</code> bloquea password/brute-force; usuario+sudo conservados para emergencia, solo entra por llave.</p>
+      </div></div>
+
+      <div class="find l"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H11</span><span class="ftitle"><code>axio-ml</code> corre como <code>axiomacloud</code> (owner ≠ app)</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 5</span><span class="tag">axiodemo</span><span class="tag">Baja</span><span class="tag">pendiente</span></div>
+        <p class="fdesc">Normalizar a usuario dedicado + hook ollama (Fase 6).</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H12</span><span class="ftitle">Deploy de <code>axio</code> con <code>origin</code> mal apuntado (a ProHub)</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 2 · integridad de deploy</span><span class="tag">axiodemo</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ corregido 2026-07-18</span> — <code>origin</code> re-apuntado a <code>github-axio:AxiomaCloud/axio.git</code> vía deploy key SSH; <code>fetch</code> verifica que trae axio, no hub; working tree intacto. Reconciliar cambios locales + <code>pull</code> queda para Fase 6.</p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H13</span><span class="ftitle">Vulnerabilidades de dependencias sin escanear/remediar</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 7</span><span class="tag">apps (axioma)</span><span class="tag">Media</span></div>
+        <p class="fdesc"><span class="st ok">✓ desplegado y verificado 2026-07-20</span> — <strong>61 → 11 vulnerabilidades, críticas 3 → 0</strong>, sin <code>--force</code> (todo dentro de semver; <code>axios 1.13.2→1.18.1</code> cerró 23 advisories). El <code>audit fix</code> rompió el build (tipado de axios), corregido en 2 líneas, con <strong>57/57 tests en PASS</strong>. Desplegado a <code>/var/www/hub</code> como <code>hubapp</code> (commit <code>67a9d83</code>), <strong>sin rollback</strong>: <code>hub.axiomacloud.com</code> <b>200</b>, <code>/health</code> <b>200</b>, login OK, <code>npm audit</code> en prod <b>0 críticas</b>, <code>find -not -user hubapp</code> vacío. Validado en vivo: <strong>mail real (SMTP+sendMail OK)</strong> y <strong>parseo de PDF con mitigación de <code>pdfjs</code></strong> (<code>disableEval</code>), que cierra la única cadena de explotación real (facturas del portal de proveedores). El <strong>proceso periódico sigue ausente</strong> — ver gap G4.</p>
+      </div></div>
+
+      <div class="find l"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">H14</span><span class="ftitle"><code>stub_status</code> de nginx no devolvió métricas al probar</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 13</span><span class="tag">los 3 con nginx</span><span class="tag">Baja</span></div>
+        <p class="fdesc"><span class="st ok">✓ verificado 2026-07-18</span> — falsa alarma: el colector apunta a <code>:8088</code> (no <code>:80</code>); el bloque stub_status existe en los 3 y el chart <code>nginx_local.connections</code> tiene datos vivos. Sin intervención en servers.</p>
+      </div></div>
+
+      <h3 style="margin-top:34px">7.1 · Reapertura de H06 y corrección del criterio de verificación</h3>
+      <p class="sub">Se documenta en detalle porque afecta la <strong>confiabilidad de los cierres declarados</strong> en este registro, y porque la corrección del método es un control en sí mismo.</p>
+
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Qué pasó</span><span class="ftitle">Un cierre declarado que no resistía verificación</span></div>
+        <p class="fdesc">H06 se declaró cerrado el 2026-07-18. La verificación tenía dos defectos: <b>(1) cobertura parcial</b> — se validó en un solo server (dev-1) y se extrapoló al resto; <b>(2) criterio equivocado</b> — se comprobó que el <strong>proceso ya en ejecución</strong> seguía funcionando tras el <code>chmod</code>, pero un proceso vivo ya tiene el <code>.env</code> leído en memoria: el permiso restrictivo no lo afecta. Lo que un <code>chmod</code>/<code>chown</code> mal aplicado rompe es el <strong>próximo arranque</strong>, que no se probó. <b>Consecuencia:</b> un cierre posterior derivado del mismo criterio provocó un <strong>incidente en producción</strong> (2026-07-20), con ~1 minuto de caída en la app afectada, resuelto por rollback inmediato.</p>
+      </div></div>
+
+      <div class="find l"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Método</span><span class="ftitle">Correcciones hoy vigentes para todo cierre de hallazgo</span></div>
+        <p class="fdesc">
+          • Verificar contra el <strong>usuario configurado para el próximo arranque</strong> (ecosystem/unit), no contra el proceso vivo; confirmar reinicio efectivo (<code>restart_time</code> estable).<br>
+          • Ejecutar la comprobación en los <strong>5 servers</strong>, sin extrapolar.<br>
+          • Usar <strong>control negativo</strong>: probar que un usuario ajeno <strong>no puede</strong> leer el secreto (p. ej. <code>hubapp</code> → NO_LEE), en vez de solo confirmar que el dueño sí puede.<br>
+          • Para cambios sobre HTTP, ampliar el criterio al <strong><code>Location</code> de las respuestas 3xx</strong>: un <code>curl → 200</code> no detecta que un redirect apunte a un host equivocado (así se detectó el fallo de H04 en las apps Next.js).<br>
+          • <strong>Relevar antes de actuar</strong>: el relevamiento previo evitó una segunda caída al detectar <code>/var/log/mini</code>, fuera de <code>/var/www</code>, sin el cual PM2 no arranca.
+        </p>
+      </div></div>
+
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">Hallazgo</span><span class="ftitle">Lo que la re-auditoría encontró y el cierre original no vio</span></div>
+        <p class="fdesc">7 archivos <code>.env</code> en <code>664</code> world-readable en dev-1 (legibles por los 8 usuarios de apps del server), ~90 directorios en <code>777</code> en mini, y 2 configuraciones de owner divergentes en axioma. Todos cerrados salvo el <code>chown -R</code> de mini/axioma, que requiere ventana. <b>Efecto sobre este dossier:</b> los cierres marcados con fecha <strong>2026-07-19 o posterior</strong> fueron verificados con el criterio corregido; los anteriores se re-verificaron o se anotaron explícitamente cuando no fue posible.</p>
+      </div></div>
+    </section>
+
+    <!-- 8 -->
+    <section class="block" id="s8">
+      <div class="sec-head"><span class="sec-num">§7.2</span><h2>Relevamiento in-situ 2026-08-09 — hallazgos que la documentación no reflejaba</h2></div>
+      <p class="sub">Primer relevamiento <strong>contra los servidores</strong> desde que se compiló el dossier. Se ejecutaron por primera vez las cadencias <strong>C2</strong> (acceso de emergencia), <strong>C4</strong> (auditoría de accesos) y <strong>C10</strong> (inventario de secretos), más las acciones <strong>S10</strong> y <strong>A8</strong>. Los cinco hallazgos comparten una característica: <strong>ninguno era deducible leyendo el repositorio</strong>.</p>
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">R20</span><span class="ftitle">El proveedor de hosting tiene acceso administrativo efectivo a dev-1</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 5 · 6</span><span class="tag">dev-1</span><span class="tag">ALTA</span><span class="tag">Ley 25.326</span></div>
+        <p class="fdesc"><code>/home/axiomacloud/.ssh/authorized_keys</code> de <strong>dev-1</strong> tiene 53 entradas, <strong>48 de ellas <code>@donweb.com</code></strong> — no en <code>root</code>, sino en la <strong>cuenta de operación, que tiene <code>sudo</code> sin contraseña</strong>. Sin <code>from=</code> ni <code>command=</code>. dev-1 aloja <strong>16 copias de bases productivas</strong>, incluida <code>mediflow_db</code> (🔴 datos de salud). En <code>root</code> hay además ~43 llaves suyas en axioma (46), clubix (43) y dev-1 (43); <strong>axiodemo tiene 0</strong>, lo que prueba que un server puede operar sin ellas.</p>
+        <p class="fdesc"><strong>Uso confirmado:</strong> <code>santiago.fernandez@donweb.com</code> autenticó como <strong>root</strong> el <strong>2026-07-14 a las 11:29:52 y 12:32:24</strong> desde <code>200.58.112.191</code> — una de las dos IPs que este mismo dossier documentaba como "solo monitoreo SNMP" —, y <code>lastlog</code> registra un acceso previo el <strong>2026-06-11 02:39</strong>.</p>
+        <p class="fdesc"><strong>Lo que la evidencia NO permite afirmar:</strong> no hay indicios de exploración interactiva (el <code>/root/.bash_history</code> es continuo de enero a agosto y no tiene comandos el 13–15 de julio), pero <strong>tampoco puede descartarse acceso a datos</strong>: un <code>ssh host &lt;comando&gt;</code> o un <code>scp</code> no dejan rastro en el historial, <code>sshd</code> registra la autenticación y no la actividad, y <code>auditd</code> retiene solo 2 días. La conclusión honesta es <strong>acceso confirmado, uso no determinable</strong>.</p>
+        <p class="fdesc"><strong>Consecuencia regulatoria:</strong> quien puede leer datos personales por cuenta del responsable es, bajo la <strong>Ley 25.326</strong>, un <strong>encargado de tratamiento</strong> — con obligación de contrato. La figura la define la <em>posibilidad</em> de acceso, no su ejercicio.</p>
+      </div></div>
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">R14</span><span class="ftitle">El blocklist del <code>axio-db-agent</code> no incluye los datos que debía proteger</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 3 · 5</span><span class="tag">axioma + clubix</span><span class="tag">ALTA</span></div>
+        <p class="fdesc">Contenido real leído del <code>.env</code>: <code>BLOCKED_TABLES = admins, admin_tokens, tenant_configuracion, configuracion, audit_log, sessions</code> · <code>BLOCKED_COLUMNS = password, token, tokenPortal, apiKey, secret, hash</code> · <code>MAX_ROWS = 1000</code>. <strong>Es idéntico en las 5 configuraciones</strong> (<code>MINI_</code>, <code>ALVERA_</code>=mediflow, <code>PARSE_</code>, <code>ELORE_</code> en axioma; <code>CLUBIX_</code> en clubix): <strong>nunca se escribió un blocklist por aplicación</strong>. Protege <em>el sistema</em> — credenciales, configuración, auditoría — y <strong>no hay una sola tabla clínica ni de negocio en la lista</strong>. Agravante: el agente conecta con el rol <strong><code>mediflowuser</code></strong>, que por el estándar es <strong>owner de la base y de todos sus objetos</strong>, y es el rol de la contraseña débil de 8 caracteres (R06).</p>
+      </div></div>
+      <div class="find h"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">R18</span><span class="ftitle">Cambio de <code>sshd</code> escrito y nunca aplicado</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 4</span><span class="tag">los 4 servers</span><span class="tag">ALTA</span></div>
+        <p class="fdesc">El 2026-08-09 se creó <code>/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf</code> con <code>PasswordAuthentication yes</code> en los <strong>4 servers</strong>. <strong>Nunca tomó efecto</strong>: <code>sshd</code> no se recargó y <code>sshd -T</code> sigue devolviendo <code>no</code>. El riesgo es que <strong>el archivo sigue en disco</strong>: el próximo <code>reload</code>, actualización de OpenSSH o reboot lo activa en silencio. <strong>Un cambio que no se aplicó es más peligroso que uno que sí, porque nadie lo está mirando.</strong></p>
+      </div></div>
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">R19</span><span class="ftitle">~43 llaves de terceros en <code>root</code>, sin inventariar</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 5 · 6</span><span class="tag">axioma · clubix · dev-1</span><span class="tag">MEDIA</span></div>
+        <p class="fdesc">Hoy <strong>inertes</strong> por <code>PermitRootLogin no</code> — el fix del 2026-07-17 les cortó el acceso sin que quedara registrado ese efecto colateral. Quedan como <strong>acceso latente</strong>: revertir esa directiva, o que la revierta una actualización, reabre las ~43 de golpe. El control no debería depender de una sola directiva.</p>
+      </div></div>
+      <div class="find m"><div class="stripe"></div><div class="fbody">
+        <div class="fhead"><span class="fid">drift</span><span class="ftitle">Segundo <code>axio-db-agent</code> en clubix, desplegado tras la entrega</span></div>
+        <div class="fmeta"><span class="tag cis">CIS 2 · 3</span><span class="tag">clubix</span><span class="tag">MEDIA</span></div>
+        <p class="fdesc"><code>hardening.md</code> afirmaba: <em>"hay un solo agente, en axioma… en clubix y axiodemo no existe"</em>. Es falso desde el <strong>2026-07-24</strong>: clubix tiene <code>/opt/axio-db-agent</code> <code>enabled</code> y <code>active</code>. Se desplegó <strong>un día después de entregar el dossier al auditor</strong>. No es un error del relevamiento: es <strong>deriva post-entrega</strong> de un canal de acceso a datos que no quedó registrado.</p>
+      </div></div>
+
+      <div class="callout warn">
+        <p><strong>📌 Nomenclatura — alvera = mediflow.</strong> La aplicación se llama <strong>alvera</strong>; <code>mediflow</code> es el nombre anterior, conservado deliberadamente en la infraestructura. El rename llegó a los <strong>dominios y vhosts</strong> (<code>alvera.axiomacloud.com</code>, <code>api.alvera.axiomacloud.com</code>, <code>alvera.com.ar</code>) y a la config del <code>axio-db-agent</code> (<code>ALVERA_DATABASE_URL</code>), pero <strong>no</strong> a <code>/var/www/mediflow</code>, al usuario de SO <code>mediflowapp</code>, a <code>pm2-mediflowapp.service</code>, ni a la base <strong><code>mediflow_db</code></strong> y el rol <strong><code>mediflowuser</code></strong>.</p>
+        <p>Se documenta la equivalencia y <strong>no se propone renombrar</strong>: tocar base, rol y unidad de systemd en una aplicación productiva tiene más riesgo que beneficio. Pero es necesaria para leer este dossier — la base 🔴 Sensible se llama <code>mediflow_db</code> mientras la aplicación se llama alvera, y en el <code>axio-db-agent</code> la ambigüedad es máxima: <code>ALVERA_DATABASE_URL</code> apunta a <code>mediflow_db</code>. <strong>Impacto operativo:</strong> en un restore, la orden <em>"recuperá alvera"</em> obliga a traducir a <code>mediflow_db</code>, <code>/var/www/mediflow</code> y <code>mediflowapp</code> bajo presión — minutos que el DRP no presupuesta.</p>
+      </div>
+
+      <div class="sec-head"><span class="sec-num">§8</span><h2>Gaps de gobierno</h2></div>
+      <p class="sub">Documentos que un auditor pediría. No son fallas técnicas, sino artefactos de gobierno — se listan honestamente. Son la razón del semáforo rojo del dominio Gobierno (§1). <strong>Al 2026-08-11 están los 10 redactados</strong> (G1–G5 el 07-23, G6–G8 el 08-06, G9–G10 el 08-11, en <code>docs/gobierno/</code>, índice en <code>marco-gobierno.md</code>). <strong>Documento redactado ≠ gap cerrado:</strong> el ✓ indica que el artefacto existe; el semáforo indica si además hay <strong>evidencia de ejecución</strong>. Los 8 redactados siguen 🟡 — ninguno acumula todavía los ciclos que sus propias secciones de gobierno exigen para pasar a 🟢, y por eso el dominio Gobierno de §1 no pasa a verde.</p>
+      <div class="gaps">
+        <div class="gap done"><span class="gid">G1</span><span class="gtxt"><span class="gtitle">Política de seguridad formal<span class="gbadge">✓ redactada 07-23</span></span>Redactada en <code>gobierno/g1-politica-seguridad.md</code>: consolida en una política v1 las prácticas antes dispersas en <code>hardening.md</code>, <code>estandar-despliegue.md</code> y <code>disaster-recovery-plan.md</code> — alcance, principios rectores, control de acceso, cifrado, clasificación de datos, retención, revisión y aprobación. <strong>Pendiente: firma formal</strong> del responsable y del backup técnico.</span></div>
+        <div class="gap done"><span class="gid">G2</span><span class="gtxt"><span class="gtitle">Matriz de roles y responsabilidades (RACI)<span class="gbadge">✓ redactada 07-23</span></span>Redactada en <code>gobierno/g2-roles-responsabilidades.md</code>: formaliza roles (RT <code>mfourgeaux</code> + <strong>backup técnico Rodrigo Naranjo</strong>, con acceso a los 5 servidores ya provisto, + <strong>aprobación de negocio Darío Cukier</strong>), matriz RACI por dominio, escalamiento y riesgo residual. El <strong>bus factor pasa de 1 a 2</strong> y la aceptación de riesgos queda <strong>segregada</strong> (aprueba la AN, distinta del ejecutor). Residual único (traqueado en G3/R08): registrar la primera co-ejecución del BT.</span></div>
+        <div class="gap done"><span class="gid">G3</span><span class="gtxt"><span class="gtitle">Gestión de riesgos<span class="gbadge">✓ redactado 07-23</span></span>Redactado en <code>gobierno/g3-registro-riesgos.md</code>: registro formal con metodología P×I, <strong>20 riesgos (R01–R20) + 4 escenarios de desastre (RD-A…D)</strong>, cada uno con probabilidad, impacto, nivel, tratamiento y owner. Consolida los hallazgos abiertos (H04, H06, H09, H11), los residuales aceptados y el bus factor de ejecución. <strong>Ampliado el 2026-08-09 con 4 riesgos nuevos</strong> surgidos de redactar G7 y G8 — <strong>R13</strong> (posibles datos productivos 🔴 en dev-1), <strong>R14</strong> (el <code>axio-db-agent</code> accede a 4 bases productivas incluida <code>mediflow_db</code>, restringido por allowlist de aplicación y no por permisos de PostgreSQL), <strong>R15</strong> (claves de cifrado de datos en reposo sin respaldo verificado) y <strong>R16</strong> (contraseñas de cuentas de SO fuera de inventario, materializado en una exposición). Ninguno es una degradación de la infraestructura: <strong>ya existían y no estaban vistos</strong> — el marco está operando como instrumento de detección. <strong>Prioritarios 🔴:</strong> R08, <strong>R13</strong>, <strong>R14</strong> y RD-A. Aceptados pendientes de firma de la AN: R03, R05, R12; <strong>R13 y R14 requieren decisión de la AN</strong> por tocar datos del art. 7 de la Ley 25.326.</span></div>
+        <div class="gap done"><span class="gid">G4</span><span class="gtxt"><span class="gtitle">Gestión de vulnerabilidades y parches (CIS 7)<span class="gbadge">✓ redactada 07-23</span></span>Redactada en <code>gobierno/g4-gestion-vulnerabilidades.md</code>: política que formaliza el <strong>proceso periódico</strong> que faltaba — alcance por capa (SO, PostgreSQL, Node, npm, nginx, pgBackRest), severidad CVSS ajustada por explotabilidad real, <strong>cadencia de escaneo</strong> (npm mensual + en cada deploy; SO mensual; runtimes trimestral) y <strong>SLA de parcheo</strong> (crítica 72 h · alta 7 d · media 30 d · baja próximo ciclo). La remediación de hub del 07-20 (61 → 11 vulns, críticas 3 → 0, 57/57 tests PASS, sin rollback) queda como caso de referencia. <strong>Además, <code>unattended-upgrades</code> verificado operativo en los 5 servers (07-23)</strong> — parcheo automático de seguridad del SO al 100% (motor real: <code>apt-daily-upgrade.timer</code>), <code>Automatic-Reboot=false</code> (kernel requiere reboot manual); pendiente unificar el alcance <code>-updates</code> (hoy solo axioma/dev-1). El gap pasa a 🟢 cuando el proceso acumule <strong>≥2 ciclos mensuales registrados</strong> (evidencia en G6). Riesgo asociado: R09.</span></div>
+        <div class="gap done"><span class="gid">G5</span><span class="gtxt"><span class="gtitle">Plan de respuesta a incidentes formal (CIS 17)<span class="gbadge">✓ redactado 07-23</span></span>Redactado en <code>gobierno/g5-respuesta-incidentes.md</code>: IR plan independiente y más amplio que el DRP (cubre intrusión, credencial filtrada, ataque activo, malware) con el ciclo NIST/CIS-17 completo — roles del incidente (IC/BT/AN), <strong>clasificación SEV-1…4</strong> con objetivos de respuesta, detección (Netdata+logs+ufw, con el gap SIEM registrado), flujo detección→contención→erradicación→recuperación→lecciones, comunicación (incl. Ley 25.326), contactos de emergencia y <strong>plantilla de post-mortem</strong>. Recomendado un incidente simulado anual (cierra R08). Riesgo asociado: R10.</span></div>
+        <div class="gap done"><span class="gid">G6</span><span class="gtxt"><span class="gtitle">Cadencia y registro de revisiones periódicas<span class="gbadge">✓ redactado 08-06</span></span>Redactado en <code>gobierno/g6-revisiones-periodicas.md</code>. El hallazgo era que las cadencias estaban <strong>declaradas pero dispersas</strong> (DRP §7.1 trimestral, §7.2 drill mensual, §5.3 verificación SSH mensual) y <strong>sin registro de ejecución</strong>: un auditor no podía distinguir una cadencia cumplida de una comprometida. Consolida las <strong>10 cadencias del marco (C1–C10)</strong> en un calendario único con frecuencia, responsable, origen y evidencia, y aporta el <strong>libro de evidencia</strong> (§2–§7) donde cada corrida se asienta con fecha, ejecutor y resultado. Define qué hacer ante una cadencia omitida (se registra, no se borra; dos ciclos consecutivos abren un riesgo en G3). Es el documento contra el cual se cierran G4 y el propio G6. <strong>Gap en 🟡</strong> — el registro recién arranca (1 ciclo de drills; C2, C4 y C9 sin ejecuciones). Pasa a 🟢 con <strong>≥3 ciclos mensuales consecutivos</strong> de C1/C2/C3 y la primera auditoría de accesos (C4). Riesgos: R11, R08.</span></div>
+        <div class="gap done"><span class="gid">G7</span><span class="gtxt"><span class="gtitle">Política de rotación e inventario de secretos<span class="gbadge">✓ redactada 08-06</span></span>Redactada en <code>gobierno/g7-rotacion-secretos.md</code> (CIS 3 y CIS 5). Separa lo ya resuelto — la <strong>custodia</strong> (SOPS+age, <code>.env</code> cifrados, clave age fuera de banda, roundtrip verificado) — de lo que faltaba: el <strong>ciclo de vida</strong>. Aporta el <strong>inventario formal (S01–S18)</strong> con ubicación, owner, criticidad, última rotación y frecuencia; <strong>frecuencia base anual</strong> por criticidad más <strong>rotación inmediata obligatoria</strong> ante exposición, incidente, baja de personal o cambio de proveedor. Documenta tres excepciones razonadas: la clave age (S01) rota <em>por evento</em> — rotarla implica re-cifrar los 16 <code>.env</code> —, las claves de cifrado de datos de aplicación (S15) tampoco rotan por calendario porque rotarlas es una <strong>migración de datos</strong>, y el <code>cipher-pass</code> de pgBackRest (S02) <strong>no se rota</strong>: descifra los backups ya existentes en R2 y cambiarlo haría irrecuperable el histórico. Los candidatos ya conocidos quedan formalizados como <strong>S04</strong> (password de <code>mediflowuser</code>, 8 caracteres — rotación inmediata) y <strong>S05</strong> (credenciales AWS del <code>.env</code> de hub, SDK nunca importado — revocar). <strong>Inventario desagregado el 2026-08-09 (§3.2, cierra la acción A3):</strong> se enumeraron los <strong>16</strong> <code>.env</code> del repo — no 15, como declaraban esta política, el README del repo y este dossier — leyendo <strong>solo los nombres de variable</strong>. Es posible porque la regla de SOPS cifra únicamente los valores, de modo que el inventario resulta <strong>auditable sin la clave age y sin descifrar un solo secreto</strong>. Resultado: 15 <code>DATABASE_URL</code> · 8 <code>JWT_SECRET</code> · 8 claves de Anthropic · 6 credenciales SMTP · ~8 API keys internas. <strong>La pasada encontró tres clases de secreto que la propia política no cubría</strong> — <strong>S15</strong> claves de cifrado de datos en reposo (<code>ENCRYPTION_MASTER_KEY</code> de mediflow, que protege la única base 🔴 y cuya pérdida haría <strong>ilegibles los datos restaurados desde backup</strong>), <strong>S16</strong> contraseñas de cuentas de SO, y <strong>S17</strong> claves de proveedores de IA — y <strong>corrigió un error de atribución</strong>: S12 decía "MercadoPago en mini" cuando la pasarela vive en <strong>clubix</strong>; lo filtrado en los logs de mini son <code>whatsappApiKey</code>, <code>smtpPass</code> y contraseñas de usuarios, ahora separado como <strong>S18</strong>. <strong>Gap en 🟡</strong> — S10 (claves SSH de deploy) sigue sin relevar porque <code>infra-secrets</code> no las custodia; la columna "última rotación" sigue casi vacía; <strong>ninguna rotación programada</strong> registrada. Riesgos: R05, R06, R07, R08, <strong>R14</strong>, <strong>R15</strong>, <strong>R16</strong>.</span></div>
+        <div class="gap done"><span class="gid">G8</span><span class="gtxt"><span class="gtitle">Clasificación de datos y cumplimiento<span class="gbadge">✓ redactado 08-06</span></span>Redactado en <code>gobierno/g8-clasificacion-datos.md</code> (CIS 3). Define <strong>4 niveles</strong> (🔴 Sensible art. 7 Ley 25.326 · 🟠 Confidencial · 🟡 Interno · 🟢 Público) con controles mínimos por nivel, el marco regulatorio aplicable, el mapa de <strong>terceros y transferencias</strong> (Cloudflare R2, proveedor VPS, Netdata Cloud) y la clasificación base por base de las 4 stanzas. <strong>Hallazgo principal:</strong> <strong>dev-1</strong>, un servidor de <em>desarrollo</em>, aloja <strong>16 bases homónimas de las productivas</strong> (<code>mediflow_db</code>, <code>mini_db</code>, <code>clubix_db</code>, <code>checkpoint_db</code>, <code>hub_db</code>, <code>core_db</code>…); si contienen datos reales, dev-1 hereda la clasificación de producción — incluido el 🔴 de <code>mediflow_db</code> — y estaría tratando datos de salud bajo controles de desarrollo. <strong>Gap en 🟡</strong> — ⚠️ la clasificación se construyó desde el <strong>inventario técnico</strong> (nombre de base + dominio funcional), <strong>no</strong> desde una inspección del esquema: las filas <em>(a confirmar)</em> requieren validación funcional. Pasa a 🟢 con A1 (validar contenido real, empezando por <code>mediflow_db</code>), A2 (determinar si dev-1 aloja datos productivos reales), A7, A8 y la resolución de la AN sobre las obligaciones O1–O6. <strong>Ampliado el 2026-08-09</strong> con lo que salió del inventario desagregado de secretos de G7: (a) un <strong>canal de acceso a datos 🔴 no contemplado</strong> — el <code>axio-db-agent</code> llega a 4 bases productivas incluida <code>mediflow_db</code>, y lo único que lo separa de los datos de salud es una <strong>variable de entorno</strong> (<code>ALVERA_BLOCKED_TABLES</code>/<code>_BLOCKED_COLUMNS</code>), no un <code>GRANT</code> de PostgreSQL (§5.2.1 · riesgo <strong>R14</strong> · acción <strong>A8</strong>); (b) un <strong>canal de transferencia a terceros no contemplado</strong> — 8 apps tienen credenciales de proveedores de IA, entre ellas mediflow, lo que <strong>podría</strong> constituir transferencia internacional (art. 12) de datos del art. 7; el documento es explícito en que tener la credencial <strong>no prueba</strong> que se envíen datos personales, y que determinarlo exige revisar el código de cada app, fuera del alcance de este dossier (§4.1 · acción <strong>A7</strong>); (c) como evidencia <strong>a favor</strong>, un control fuerte que la clasificación desconocía: mediflow <strong>cifra datos en reposo a nivel de aplicación</strong> (§5.2). <strong>R13 y R14 ya registrados en G3</strong> — R13 dejó de ser una propuesta.</span></div>
+        <div class="gap done"><span class="gid">G9</span><span class="gtxt"><span class="gtitle">Plan de continuidad de negocio (BCP)<span class="gbadge">✓ redactado 08-11</span></span>Redactado en <code>gobierno/g9-continuidad-negocio.md</code>. Cubre lo que el DRP no: el DRP responde <em>cómo recupero los datos</em>; el BCP responde <em>con qué, desde dónde y quién</em>. Su aporte central es el <strong>kit de continuidad</strong> — los 10 elementos (K1–K10) sin los cuales nadie puede operar la infraestructura aunque los servidores estén sanos. <strong>Siete de los diez dependen exclusivamente del RT, y tres no estaban inventariados en ningún lado</strong>: panel del proveedor (K6), acceso a Cloudflare (K8) y custodia de la clave age (K3). <strong>K8 es el más contraintuitivo</strong>: si se pierde el acceso al DNS, los servidores siguen funcionando y el servicio queda caído igual — ningún backup lo resuelve. Documenta 5 escenarios no cubiertos por el DRP, <strong>dos desde su ocurrencia real</strong>: BC-A (pérdida del entorno de trabajo, RTO observado ~4 h) y BC-C (pérdida de la clave age). <strong>BC-B es el hueco más caro</strong>: el DRP asume que restaurar la base restaura los datos, y para <code>mediflow_db</code> eso es falso por el cifrado a nivel de aplicación. Cierra <strong>R12</strong> —aceptado <em>hasta que existiera este documento</em>— y formaliza al proveedor de hosting como <strong>encargado de tratamiento</strong>, con cláusula de salida pendiente. Incorpora la cadencia <strong>C12</strong> (prueba semestral de continuidad, ejecutada por el <strong>BT</strong>). <strong>Gap en 🟡</strong> — plan redactado y kit inventariado; sin ninguna prueba ejecutada. Riesgos: R08, R12, R15, R17, R20.</span></div>
+        <div class="gap done"><span class="gid">G10</span><span class="gtxt"><span class="gtitle">Procedimiento de verificación de remediaciones<span class="gbadge">✓ redactado 08-11</span></span>Redactado en <code>gobierno/g10-verificacion-remediaciones.md</code>. Formaliza el criterio de cierre que se aplicaba desde la reapertura de H06 pero vivía en la memoria de quien lo aprendió. <strong>Siete reglas, cada una destilada de un error real</strong>: <strong>R1</strong> verificar contra el <em>próximo arranque</em>, no contra el proceso vivo (H06); <strong>R2</strong> cobertura total, no una muestra (H06); <strong>R3</strong> control negativo — probar que lo que debe fallar, falla; <strong>R4</strong> inspeccionar el contenido, no solo el código de estado (H04, el <code>Location</code> en los 3xx); <strong>R5</strong> verificar contra el <em>sistema</em>, no contra el documento (08-09: tres afirmaciones de este dossier eran falsas); <strong>R6</strong> verificar el <em>respaldo</em>, no la copia de trabajo (la clave age: el roundtrip corría con la copia que ya se tenía a mano); <strong>R7</strong> un cambio escrito no es un cambio aplicado (<code>99-temp-password</code>: el archivo existía, <code>sshd</code> nunca se recargó). Aporta <strong>checklist de cierre</strong>, estados admitidos —sin <em>«cerrado con salvedades»</em>: si hay salvedad, es parcial— y procedimiento de reapertura. <strong>Gap en 🟡</strong> — sin cierres ejecutados aún con la checklist adjunta; reconoce como deuda que los cierres previos no la tienen. Riesgo: R08 (ejecutor y verificador son la misma persona).</span></div>
+      </div>
+    </section>
+
+    <footer class="doc">
+      <p class="fnote"><strong>Naturaleza del documento.</strong> Todo lo aquí afirmado se deriva de evidencia versionada en el repo <code>InfraMonitoreo</code> (y su repo hermano <code>infra-secrets</code>). Cuando un control esperado no existe como documento o implementación, se marca explícitamente como gap. Nada fue inventado.</p>
+      <p class="fnote"><strong>Fuentes primarias.</strong> <span class="mono">hardening.md · disaster-recovery-plan.md · drp-app-hub-drill.md · restore-drill-procedure.md · pgbackrest-setup.md · setup-netdata-cloud.md · estandar-despliegue.md · plan-estandarizacion-y-redespliegue.md · plan-trabajo-estandarizacion.md · nginx-anti-scanner.md · netdata/ · scripts/ · drill-history.csv</span></p>
+      <p class="fnote">Compilación 2026-07-18 · <strong>estado verificado al 2026-07-23</strong> tras la pasada de remediación del 19–22 de julio y la revisión final pre-entrega: H03, H07, H08, <strong>H13</strong> (desplegado y verificado en producción el 07-20) y <strong>H01</strong> (pg_hba de axioma → loopback + scram, 07-22, sin residual) cerrados; H04 parcial; <strong>H06 reabierto</strong> (falso verde + incidente en producción, ver §7.1); H09 bloqueado por dependencia de un tercero; H11 pendiente. <strong>Consolidado: 10 cerrados · 2 parciales · 1 bloqueado · 1 pendiente · 10 gaps de gobierno (G1–G10)</strong>. <strong>⚠️ ACTUALIZADO AL 2026-08-09 — cambio sustancial.</strong> Primer relevamiento <strong>in-situ</strong> posterior a la entrega (§7.2): <strong>5 hallazgos nuevos</strong>, tres de ellos contradiciendo afirmaciones de este dossier — acceso administrativo del proveedor de hosting a dev-1 con uso confirmado (R20), blocklist del <code>axio-db-agent</code> sin tablas clínicas (R14) y un segundo agente en clubix desplegado el día después de la entrega. Además, <strong>pérdida de la clave age</strong> (R17), que deja inejecutable la recuperación de aplicaciones. Gobierno: <strong>los 10 documentos redactados</strong> (G9 y G10 el 08-11) y <strong>los 10 en amarillo</strong> — cobertura documental completa, madurez de control no. <strong>Registro de riesgos: 12 → 20.</strong> <strong>Cuatro dominios en rojo</strong> (Seguridad/Hardening, DRP, Gestión de secretos, Gobierno). Sin cambios de estado en los hallazgos técnicos H01–H14. Fuente: <code>plan-remediacion-hallazgos.md</code> + <code>drill-history.csv</code> + <code>docs/gobierno/</code> · Responsable técnico mfourgeaux@axiomacloud.com</p>
+    </footer>
+
+  </main>
+</div>
+</div>
+
+<script>
+  (function(){
+    var root=document.documentElement, btn=document.getElementById('themeBtn'),
+        icon=document.getElementById('themeIcon'), label=document.getElementById('themeLabel');
+    function current(){
+      var attr=root.getAttribute('data-theme');
+      if(attr) return attr;
+      return window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';
+    }
+    function paint(){var d=current()==='dark';icon.textContent=d?'☾':'☀';label.textContent=d?'Oscuro':'Claro';}
+    btn.addEventListener('click',function(){
+      var next=current()==='dark'?'light':'dark';
+      root.setAttribute('data-theme',next);paint();
+    });
+    if(window.matchMedia){window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',paint);}
+    paint();
+
+    // scroll spy
+    var links=[].slice.call(document.querySelectorAll('nav.toc a'));
+    var map={}; links.forEach(function(a){map[a.getAttribute('href').slice(1)]=a;});
+    var secs=[].slice.call(document.querySelectorAll('section.block'));
+    if('IntersectionObserver' in window){
+      var io=new IntersectionObserver(function(entries){
+        entries.forEach(function(e){
+          if(e.isIntersecting){
+            links.forEach(function(a){a.classList.remove('active');});
+            var a=map[e.target.id]; if(a)a.classList.add('active');
+          }
+        });
+      },{rootMargin:'-10% 0px -80% 0px',threshold:0});
+      secs.forEach(function(s){io.observe(s);});
+    }
+  })();
+</script>

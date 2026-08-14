@@ -1,0 +1,75 @@
+# InfraMonitoreo - rotacion de logs PM2 y de apps (dev-1)
+# Estrategia: copytruncate -> NO requiere reload de PM2 ni de las apps.
+# Desplegar en /etc/logrotate.d/pm2-apps (modo 644 root:root).
+
+/home/axiomacloud/.pm2/logs/*.log /home/axiomacloud/.pm2/pm2.log {
+    su axiomacloud axiomacloud
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 axiomacloud axiomacloud
+}
+
+/home/checkapp/.pm2/logs/*.log /home/checkapp/.pm2/pm2.log {
+    su checkapp checkapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 checkapp checkapp
+}
+
+/home/mediflowapp/.pm2/logs/*.log /home/mediflowapp/.pm2/pm2.log {
+    su mediflowapp mediflowapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 mediflowapp mediflowapp
+}
+
+/home/miniapp/.pm2/logs/*.log /home/miniapp/.pm2/pm2.log {
+    su miniapp miniapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 miniapp miniapp
+}
+
+/var/log/mini/*.log {
+    su miniapp miniapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 miniapp miniapp
+}
+
+/root/.pm2/logs/*.log /root/.pm2/pm2.log {
+    su root root
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 root root
+}

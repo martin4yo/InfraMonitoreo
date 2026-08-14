@@ -1,0 +1,485 @@
+# DRP — Fichas por aplicación (axioma → axioma-drp)
+
+> **Se lee junto al [runbook general](./drp-recuperacion-axioma-en-drp.md).** El runbook dice *qué hacer*;
+> esta ficha dice *con qué valores*. Cada ficha resuelve las variables `<app>`, `<appuser>`, `<path>`,
+> `<puerto>`, `<base>` y las particularidades que no son comunes al resto.
+>
+> **Datos relevados en vivo el 2026-08-11** desde axioma (`.env` de `infra-secrets`, `ecosystem.config.js`,
+> vhosts de nginx, `systemd`, `/etc/passwd`). Lo que no pudo verificarse queda marcado **(a confirmar)**.
+>
+> **Estado:** v1 — **ninguna ficha fue ejecutada todavía**. La primera prueba de cada una debe corregirla.
+
+## Tabla maestra
+
+| App | Usuario | Puerto | Base | Rol PG | Conexión | PM2 | Repo |
+|---|---|---|---|---|---|---|---|
+| **mediflow** *(alvera)* | `mediflowapp` (1000) | **5300** | `mediflow_db` | `mediflowuser` | **:6432** pgbouncer | `mediflow-backend` ×2 cluster | `martin4yo/mediflow` (SSH) |
+| **hub** | `hubapp` (993) | **5200** back · **8089** front | `hub_db` | `hubuser` | :5432 directo | `hub-backend`, `hub-frontend` | `AxiomaCloud/ProHub` (SSH) |
+| **parse** | `parseapp` (117) | **5100** back · **8087** front | `parse_db` | `parseuser` | **:6432** pgbouncer | `parse-backend` | `martin4yo/parse` (SSH) |
+| **mini** | `miniapp` (1002) | **8095** back | `mini_db` | `miniuser` | **:6432** pgbouncer | `mini-backend` | `martin4yo/AxiomaWeb` (SSH) |
+| **elore** | `eloreapp` (994) | **3700** | `elore_db` | `eloreuser` | :5432 directo | `elore` | `AxiomaCloud/Elore` rama `main` |
+| **evolution-api** | `evolutionapp` (996) | **8080** | `evolution` | *(a confirmar)* | *(a confirmar)* | *(vía systemd)* | `EvolutionAPI/evolution-api` |
+| **axio-db-agent** | `axioapp` (998) | **3005** | *4 bases ajenas* | ver ficha | :5432 directo | systemd, **sin PM2** | — |
+| **checkpoint** | *(a confirmar)* | estático | `checkpoint_db` | *(a confirmar)* | — | — | `AxiomaCloud/checkpointsite` |
+| **axioma-corporate** | *(a confirmar)* | estático | — | — | — | — | `rodrigomnaranjo/axioma-corporate` |
+
+> ⚠️ **Bases sin aplicación identificada:** `axiomadocs`, `chequescloud`, `iasqlassistant_db`, `core_db`.
+> Se restauran con el cluster (Fase 2) pero **no hay app en axioma que las consuma**. Antes del primer
+> simulacro conviene determinar si son de apps decomisionadas o si les falta un consumidor documentado.
+
+---
+
+## 🩺 mediflow (alvera) — PRIORIDAD 1
+
+> 📌 **La app se llama `alvera`; la infraestructura dice `mediflow`.** Ver
+> [Apéndice A.0 del DRP](./disaster-recovery-plan.md). Buscá `mediflow`, no `alvera`.
+
+| | |
+|---|---|
+| **Path** | `/var/www/mediflow` (backend en `/backend`, frontend en `/frontend`) |
+| **Usuario** | `mediflowapp` — ⚠️ único con grupo suplementario `www-data` |
+| **Puerto** | `5300` |
+| **Base / rol** | `mediflow_db` / `mediflowuser` |
+| **Conexión** | `localhost:**6432**` (pgbouncer) + `?pgbouncer=true&connection_limit=5` |
+| **Dominios** | `alvera.axiomacloud.com`, `api.alvera.axiomacloud.com`, `alvera.com.ar`, `www.alvera.com.ar` |
+| **vhosts** | `alvera`, `alvera.com.ar` |
+| **PM2** | `mediflow-backend` · **cluster, 2 instancias** · `--max-old-space-size=192` · `max_memory_restart 500M` |
+| **RAM medida** | 2 × 146 MB + 60 MB daemon ≈ **350 MB** |
+| **Prisma** | ✅ sí — `npx prisma generate` tras `npm ci` |
+
+**🔴 Particularidad crítica — cifrado a nivel de aplicación.** Su `.env` tiene `ENCRYPTION_MASTER_KEY`
+(64 caracteres) y `SEARCH_HASH_SALT` (128). **Los datos de `mediflow_db` están cifrados en reposo por la
+app**: un restore de pgBackRest devuelve filas cifradas. Sin esas dos claves exactas, los datos de salud
+son **permanentemente ilegibles** y ningún backup lo resuelve.
+
+> **La verificación de §9.3 del runbook no es opcional para esta app.** Es la única que distingue una
+> recuperación exitosa de una que *parece* exitosa. Riesgo **R15**.
+
+### ✅ SIMULACRO EJECUTADO — 2026-08-12
+
+**alvera levantó en axioma-drp y quedó accesible**, con hub corriendo en paralelo.
+`SPA → 200` con `<title>Alvera - Sistema de Gestión Médica</title>`, `API → 401` (auth operativa),
+**73 tablas · 4 tenants · 5 pacientes · 3212 audit_logs**. Estado final: 902 MB usados, **2686 MB libres**.
+
+**Código traído desde el repositorio de GitHub**, no desde axioma — el camino que funciona con axioma muerto.
+
+#### 🔴 EL HALLAZGO MÁS IMPORTANTE: el repo NO tiene la configuración de producción
+
+El `ecosystem.config.js` **versionado en GitHub difiere del que corre en axioma**:
+
+| | Repo (GitHub) | axioma (producción) |
+|---|---|---|
+| `NODE_ENV` | **`development`** | `production` |
+| `PORT` | **`5000`** | `5300` |
+| `node_args` | *(ausente)* | `--max-old-space-size=192` |
+
+**Desplegar siguiendo el runbook "clonar del repo" levanta la app en modo development, en el puerto
+equivocado y escuchando en `*:5000`** (todas las interfaces). La app *parece* funcionar —responde,
+autentica— y por eso el error pasa desapercibido: no falla, funciona **mal**.
+
+> 👉 **Por eso [`config/axioma/`](../config/axioma/) no es opcional.** Es la única copia fiel de la
+> configuración productiva. En el simulacro, aplicar ese archivo corrigió el arranque de inmediato.
+> **Regla: el código sale del repo, la configuración de PM2 sale de `config/axioma/`.**
+
+#### Otros hallazgos
+
+- ✅ **`npm ci` genera el cliente Prisma solo** — el `package.json` tiene
+  `postinstall: npm run build → prisma:generate`. **Distinto de hub**, donde hay que correrlo a mano desde
+  `backend/`. Dos apps del mismo parque, dos comportamientos: es el argumento para tener fichas separadas.
+- 📊 **Build medido en drp: 33 s, y el mínimo de memoria disponible fue 1598 MB** (con hub corriendo).
+  El pico consumió ~1,2 GB de los 3,9 GB. **La "regla de oro" del runbook se relaja** — ver §0.2.
+- El `.env` de producción conecta por **pgbouncer `:6432`**, que no existe en drp → se ajustó a `:5432`
+  quitando `?pgbouncer=true`. Es el desvío previsto en §3.4 del runbook.
+- Con `NODE_ENV=production` la app **fuerza redirect a HTTPS** (301). Correcto: nginx termina TLS y hay
+  que pasarle `X-Forwarded-Proto: https`, o todo responde 301 en bucle.
+- Bindea a **`*:5300`**, no a loopback, pese a `HOST=127.0.0.1` en el `.env`. Es el mismo patrón de
+  **H04** y **también ocurre en axioma** — no es un artefacto del simulacro.
+
+#### ✅ Login funcional verificado — el DR de alvera está completo
+
+**El 2026-08-12 se completó el circuito entero**: backup en R2 → base restaurada → backend → nginx →
+navegador → **login exitoso** (`POST /api/auth/login → 200`). 73 tablas, 21 usuarios activos.
+
+Llegar hasta el login destapó **tres capas** que las verificaciones de servidor no ven. Vale distinguirlas
+porque solo una es un problema real:
+
+| # | Síntoma en el navegador | Causa | ¿Problema real? |
+|---|---|---|---|
+| 1 | CORS a `http://localhost:5000/api/...` | **`VITE_API_URL` sin definir al compilar** | 🔴 **SÍ** |
+| 2 | `500` en `/api/auth/login` | El origen del ensayo no estaba en `ALLOWED_ORIGINS` | 🟢 No — artefacto |
+| 3 | `401` en `/api/auth/profile` tras un login 200 | Cookie con flag `Secure` descartada sobre `http://` | 🟢 No — la app protegiéndose |
+
+**🔴 (1) es el hallazgo: el build de producción del frontend NO es reproducible.**
+
+- El código usa `import.meta.env.VITE_API_URL`, con fallback hardcodeado a `http://localhost:5000/api`.
+- **No hay `.env` ni `.env.production` en el repo del frontend.**
+- **`infra-secrets` solo tiene `mediflow-backend.env`** — no existe `mediflow-frontend.env`.
+- ⇒ El valor con el que se compiló el `dist` que corre en axioma **existe únicamente en la shell de quien
+  lo compiló**. Si mañana hay que recompilar, nadie sabe con qué valor.
+- **Y el modo de falla es traicionero:** la app carga, se ve perfecta, y falla **recién en el login**.
+
+> **Acción: crear `mediflow-frontend.env` en `infra-secrets`** con el `VITE_API_URL` real de producción.
+> Es el equivalente, para el frontend, de lo que `config/axioma/pm2/` resolvió para el backend.
+
+**(2) y (3) no ocurrirían en un DR real**: con el DNS movido, el dominio sería
+`alvera.axiomacloud.com` —ya presente en `ALLOWED_ORIGINS`— y el certificado sería válido, así que la
+cookie `Secure` viajaría sin problema. Son fricción del ensayo, y quedan documentadas para que el próximo
+no pierda tiempo en lo mismo.
+
+**Bug menor de la app** (`websocketService.js:22`): `import.meta.env.VITE_API_URL?.replace('/api','')`
+devuelve cadena vacía si la URL es relativa, y como `''` es *falsy* cae al fallback `localhost:5000`.
+Rompe websockets con configuración relativa. No afecta el login.
+
+#### Para probar el ensayo hace falta HTTPS
+
+Se montó un **certificado autofirmado** en drp (`/etc/nginx/drill-certs/`) y el túnel expone el 443.
+**No se usó Let's Encrypt** — el límite de 5 emisiones por dominio y semana es compartido con axioma
+(§0.4). Firefox exige aceptar la excepción **también en un endpoint de la API**
+(`https://alvera-drill.local:8443/api/health`), no solo en la navegación: si no, las XHR fallan con un
+error engañoso que dice *"CORS falló, código (null)"* cuando en realidad no abrió la conexión.
+
+#### ⚠️ Lo único que queda de la 9.3
+
+
+
+Con el login ya funcionando, resta **abrir una ficha clínica y confirmar que los campos cifrados con
+`ENCRYPTION_MASTER_KEY` se leen en claro**. Es lo último que separa una recuperación exitosa de una que lo
+parece: si la clave no fuera la correcta, la app mostraría basura sin dar ningún error.
+**Pendiente de confirmación visual sobre el entorno ya montado y accesible.**
+
+#### Nota de clasificación
+
+El responsable confirmó que **alvera no está productiva con tenants reales**: está en un servidor de
+producción pero en testing. Eso responde la acción **A1 de [G8](./gobierno/g8-clasificacion-datos.md)** y
+baja de facto la clasificación 🔴 *(a confirmar)*. ⚠️ Con una salvedad: *"en testing"* no garantiza cero
+datos reales — si alguna vez se cargó un dump, vuelve a subir. **Los 5 pacientes y 3212 `audit_logs`
+merecen una mirada antes de cerrar A1.**
+
+Por decisión del responsable, **`mediflow_db` queda en drp** (sigue en testing).
+
+**Otras particularidades:**
+- Es la **única base 🔴 Sensible** del marco (datos de salud, art. 7 Ley 25.326) → cualquier incidente
+  durante el DR puede tener obligación de notificación ([G5 §5](./gobierno/g5-respuesta-incidentes.md)).
+- `TWILIO_*` está **declarado pero vacío**: no envía SMS. No perder tiempo configurándolo.
+- Tiene `ANTHROPIC_API_KEY` cargada.
+- Contraseña de `mediflowuser`: **8 caracteres, débil** (R06). El DR es buena ocasión para rotarla.
+
+---
+
+## 🔷 hub — PRIORIDAD 2
+
+| | |
+|---|---|
+| **Path** | `/var/www/hub` (`/backend`, `/frontend`, `/shared`) |
+| **Usuario** | `hubapp` (993) |
+| **Puertos** | `5200` backend · `8089` frontend (Next) |
+| **Base / rol** | `hub_db` / `hubuser` · `localhost:5432` **directo** |
+| **Dominios** | `hub.axiomacloud.com`, `api.hub.axiomacloud.com` |
+| **PM2** | `hub-backend` (`dist/server.js`) y `hub-frontend` (`next start -p 8089`) |
+| **Logs** | `/var/log/hub/` — **crear el directorio antes de arrancar** |
+| **RAM medida** | 217 MB + 61 MB daemon (en drp arrancó con 30 + 36 MB) |
+| **Prisma** | ✅ **SÍ** — corregido 2026-08-12 |
+
+**🔴 Es un MONOREPO con npm workspaces** *(verificado 2026-08-12)*. `package.json` declara
+`workspaces: ['backend','frontend','shared']` y el `node_modules` está **hoisted en la raíz**
+(`/var/www/hub/node_modules`, **1.4 GB**). No hay `node_modules` dentro de `frontend/`.
+
+- 👉 **`npm ci` se corre en `/var/www/hub`, NO en cada paquete.** Correrlo dentro de `backend/` o
+  `frontend/` no reproduce el árbol y la app no arranca.
+- El `package-lock.json` autoritativo es el de la **raíz**.
+- `hub-frontend` arranca con `node_modules/next/dist/bin/next` **relativo a la raíz hoisted**.
+
+**📦 El artefacto a transferir es chico — 22 MB, no 500:**
+
+| Qué | Tamaño |
+|---|---|
+| `backend/dist` | 3,0 MB |
+| `frontend/.next` **sin `cache/`** | **19 MB** |
+| `frontend/public` | 120 KB |
+| ~~`frontend/.next/cache`~~ | ~~473 MB~~ — **caché de build, NO copiar** |
+| ~~`node_modules` (raíz)~~ | ~~1,4 GB~~ — se regenera con `npm ci` en drp |
+
+> `.next` pesa 491 MB en axioma, pero **473 son caché de compilación**. Excluir `cache/` baja la
+> transferencia de 491 MB a 19 MB. Es la diferencia entre minutos y segundos en un DR.
+
+### ✅ SIMULACRO EJECUTADO — 2026-08-12
+
+**hub levantó en axioma-drp y quedó accesible.** `frontend → 200` con `<title>Axioma - Hub</title>`,
+`backend /health → 200` con `{"status":"ok"}`, **87 tablas** restauradas, 700 MB usados de 3911.
+Sin tocar producción: datos desde R2, configuración desde `infra-secrets`.
+
+**Los cuatro tropiezos, en orden de aparición:**
+
+1. 🔴 **`locale-gen en_US.UTF-8` faltaba en drp** → el cluster restaurado no arranca. Bloqueante total,
+   y el `pgbackrest restore` dice *"completed successfully"* igual. Ahora es el paso **1.8** del runbook.
+2. 🔴 **hub usa Prisma** — esta ficha decía que no. El escaneo buscó `.prisma` en `backend/node_modules`,
+   pero por el **hoisting del monorepo** vive en `/var/www/hub/node_modules/.prisma`.
+3. 🔴 **`npx prisma generate` se corre desde `backend/`, NO desde la raíz.** El `prisma.config.ts` está en
+   la raíz pero declara `schema: "prisma/schema.prisma"` **relativo al cwd**, y el schema real está en
+   `backend/prisma/`. Desde la raíz falla con *"Could not load schema"*.
+4. 🟡 **Tras `systemctl reload nginx`, el primer request lo atiende el worker viejo** y devuelve la página
+   por defecto. Ya estaba documentado en [`nginx-anti-scanner.md`](./nginx-anti-scanner.md); volvió a
+   morder. **Re-testear a los pocos segundos.**
+
+### 🔴 Inconsistencias de PRODUCCIÓN que el simulacro destapó
+
+Estas no son del DR: existen hoy en axioma y el ejercicio las hizo visibles.
+
+- **El `.env` tiene un comentario pegado al valor**, sin salto de línea:
+  `JWT_SECRET=<valor>== # AWS S3 (configurar cuando sea necesario)`.
+  Node lo tolera, pero cualquier parser más estricto —o un `source` de shell— se lleva el comentario
+  **dentro del secreto**. Fragilidad latente: si un entorno lo parsea distinto, los JWT dejan de validar.
+- **15 archivos que no son código en la raíz de la app**, con datos de terceros identificados: facturas
+  (`Factura Mc Joselevich`, `factura_maria_joselevich.html`, un PDF cuyo nombre es un **CUIT**),
+  propuestas comerciales (`Ferracioli-…`, `PENDIENTES_UDESA.md`) y capturas. **9 están versionadas en
+  git.** No son accesibles por web (nginx hace `proxy_pass`, no sirve el directorio), pero es material
+  para [G8](./gobierno/g8-clasificacion-datos.md).
+
+**Particularidades:**
+- **Es la app de referencia**: fue la del drill de DRP y la de la remediación de julio (H13). Tiene el
+  mejor estado de vulnerabilidades del parque (3 altas).
+- ⚠️ **`hub-frontend` escucha en `*:8089` (`0.0.0.0`), no en loopback** — verificado 2026-08-12. Es una de
+  las 5 apps Next de **H04**, bloqueada por el patrón `-H`/redirects. En drp queda tapado por ufw.
+- El [drill hub → axioma-drp](./drp-app-hub-drill.md) es el antecedente directo de este runbook: tiene
+  detalle adicional útil, aunque **nunca se ejecutó**.
+- ⚠️ `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` en su `.env` son **peso muerto** (SDK nunca importado,
+  R07). **No replicarlas en drp** — el DR es la oportunidad natural de dejarlas afuera.
+- Único con `WHATSAPP_BUSINESS_API_TOKEN` y `TWILIO_*` **cargados de verdad**.
+- Frontend Next: **compilar afuera** (§0.2 del runbook).
+
+---
+
+## 📄 parse — PRIORIDAD 2
+
+| | |
+|---|---|
+| **Path** | `/var/www/parse` (`/backend`, `/frontend`, `/frontend/mobile-pwa`) |
+| **Usuario** | `parseapp` — ⚠️ **uid 117, gid 124** (usuario de sistema, no 1000+) |
+| **Puertos** | `5100` backend · `8087` frontend |
+| **Base / rol** | `parse_db` / `parseuser` · `localhost:**6432**` pgbouncer |
+| **Dominios** | `parse.axiomacloud.com`, `api.parse.axiomacloud.com` |
+| **PM2** | `parse-backend` (`backend/src/index.js`, fork) |
+| **RAM medida** | **595 MB** — ⚠️ **la app más pesada del parque** |
+
+### ✅ SIMULACRO EJECUTADO — 2026-08-12 · **al primer intento**
+
+**parse levantó sin un solo reinicio ni error**, con hub y alvera ya corriendo. `SPA → 200` con
+`<title>Axioma - Parse</title>`, `API /api/health → 200`, **58 tablas** restauradas sin errores.
+Las **tres apps conviviendo**: 1256 MB usados de 3911.
+
+**Era la prueba de fuego**: la app más pesada del parque (595 MB en axioma), la de más módulos nativos
+(20 binarios `.node`, `sharp`, `bcrypt`, Prisma) y la del `PM2_HOME` no estándar. **Que saliera limpia
+valida el runbook** — los tropiezos de hub y alvera eran de las apps, no del procedimiento.
+
+**Medición del build de Next** (con las otras dos apps corriendo): **125 s, mínimo de memoria disponible
+1785 MB** de 3911. Consumió ~770 MB — **menos que el build de Vite de alvera** (que bajó a 1598 MB).
+
+> 📊 **Con dos mediciones, la "regla de oro" del runbook queda corregida por evidencia:** compilar en drp
+> consume entre **0,8 y 1,2 GB de pico** y deja más de 1,5 GB libres. **No es un bloqueante.** El artefacto
+> pre-compilado sigue siendo preferible por velocidad (33 s contra 125 s), no por capacidad.
+
+**El único ajuste necesario** fue el `NEXT_PUBLIC_API_URL` para el vhost del ensayo — el mismo tipo de
+cambio que en alvera, pero acá el valor de producción **sí estaba en `infra-secrets`**.
+
+#### ✅ Contraste con alvera: el esquema de config de build SÍ funciona
+
+| | alvera | **parse** |
+|---|---|---|
+| `.env` del frontend en `infra-secrets` | ❌ No existe | ✅ **Existe** (`NEXT_PUBLIC_API_URL=https://api.parse.axiomacloud.com`) |
+| Build de producción reproducible | ❌ No | ✅ **Sí** |
+
+> **Corrige una generalización apresurada.** Tras el simulacro de alvera se concluyó que la configuración
+> de build no estaba versionada. parse demuestra que **era específico de alvera**: el esquema funciona y a
+> alvera le falta una pieza. Si se hubiera generalizado desde un solo caso, se habría propuesto rediseñar
+> algo que ya andaba.
+
+**Particularidades:**
+- ✅ **`PM2_HOME` es `/var/www/parse/.pm2`** — se respetó en el simulacro y arrancó sin problemas. Confirmado
+  como el dato más fácil de pasar por alto: con el `PM2_HOME` por defecto, PM2 no encuentra la app.
+- 🔴 **`PM2_HOME` es `/var/www/parse/.pm2`, no `/home/parseapp/.pm2`.** Si PM2 "no encuentra" la app, es
+  esto. Es la desviación más fácil de pasar por alto de todo el runbook.
+- Es la app con **más dependencias nativas**: 20 binarios `.node`, más `sharp`, `bcrypt` y Prisma.
+  **La que más se rompe si se compila en la plataforma equivocada.**
+- Su `.env` tiene 45 variables — el más grande. Incluye `GOOGLE_APPLICATION_CREDENTIALS` (Document AI):
+  **verificar que el archivo de credenciales al que apunta también se copie**, o la app arranca y falla
+  al procesar.
+- Tiene `ENCRYPTION_KEY` y `SYNC_PASSWORD_KEY` — mismo problema conceptual que mediflow, a confirmar
+  si cifra datos en reposo.
+
+**🔴 `google-credentials.json` no está respaldado en NINGÚN lado** *(verificado 2026-08-12)*. El `.env`
+declara `GOOGLE_APPLICATION_CREDENTIALS=/var/www/parse/backend/google-credentials.json`, y ese archivo:
+
+| ¿Está en…? | |
+|---|---|
+| El repo de parse | ❌ No |
+| `infra-secrets` | ❌ No — solo está el `.env` que lo *referencia* |
+| `config/axioma/` | ❌ No |
+| **axioma** | ✅ **Única copia existente** |
+
+Es una **clave privada de service account de Google** (Document AI). A diferencia de `VITE_API_URL` o del
+`ecosystem.config.js`, **esto sí es un secreto** — y por eso no puede ir a `config/axioma/`, que es un
+directorio público del repo: **debe ir a `infra-secrets`**.
+
+> **Es el caso más grave de la familia.** El `.env` está prolijamente cifrado en `infra-secrets`, pero
+> **apunta a un archivo que no lo está**. Un inventario de secretos que solo mire los `.env` lo declara
+> cubierto y no lo está. Es una fuga silenciosa del alcance de [G7](./gobierno/g7-rotacion-secretos.md).
+>
+> **Y es el único de su tipo:** ninguna otra app del parque referencia archivos externos de credenciales
+> — se verificaron los 16 `.env`. Eso lo hace fácil de resolver, y fácil de olvidar.
+
+✅ **RESUELTO el 2026-08-12.** Cifrado con SOPS en `infra-secrets/creds/axioma/parse-google-credentials.json`
+(11 campos cifrados, roundtrip verificado). Registrado como **S19** en [G7](./gobierno/g7-rotacion-secretos.md),
+con el alcance de la política corregido para incluir **credenciales en archivo**.
+
+**Al restaurar parse, además del `.env`:**
+```bash
+sops --decrypt creds/axioma/parse-google-credentials.json > /var/www/parse/backend/google-credentials.json
+chmod 600 … && chown parseapp:parseapp …
+```
+- `:8087` ya está en loopback (fix de H04).
+- El `ecosystem.config.js` documenta explícitamente **no correr PM2 como root**.
+
+---
+
+## 🛒 mini — PRIORIDAD 2
+
+| | |
+|---|---|
+| **Path** | `/var/www/mini` (`/backend`, `/frontend`, `/print-agent`, `/print-manager`, `/web`) |
+| **Usuario** | `miniapp` (1002) |
+| **Puerto** | `8095` backend |
+| **Base / rol** | `mini_db` / `miniuser` · `localhost:**6432**` pgbouncer |
+| **Dominios** | `mini.axiomacloud.com` · `axioma.ar` + `www.axioma.ar` (estático desde `/var/www/mini/web`) |
+| **Frontend** | **estático**, servido por nginx desde `/var/www/mini/frontend/dist` |
+| **RAM medida** | 183 MB + 61 MB daemon |
+
+**Particularidades:**
+- 🔴 **Sus credenciales están filtradas en `~/.pm2/pm2.log`** (S18, `hardening.md` §9): `whatsappApiKey`
+  de Evolution, `smtpPass` de Gmail y contraseñas de usuarios. **Rotarlas como parte del DR** — levantar
+  en drp con credenciales ya comprometidas es desperdiciar la oportunidad.
+- ⚠️ **El árbol tiene ~83.000 archivos con owner ≠ `miniapp`** en axioma (H06). En drp se crea limpio:
+  **hacer el `chown -R` correcto desde el inicio** y no heredar el problema.
+- Tiene `SESSION_SECRET` además de `JWT_SECRET`: rotarlo invalida sesiones activas.
+- Sirve **dos frontends**: el SPA de `mini` y el sitio corporativo de `axioma.ar`. Ambos son estáticos —
+  copiar los directorios, no compilar.
+- La integración MercadoPago existe en código pero **`mercadopago_config` está vacía**: no está operativa.
+  No es una app de pagos.
+
+---
+
+## 🎫 elore — PRIORIDAD 3
+
+| | |
+|---|---|
+| **Path** | `/var/www/elore` (app Next monolítica) |
+| **Usuario** | `eloreapp` (994) |
+| **Puerto** | `3700` |
+| **Base / rol** | `elore_db` / `eloreuser` · `localhost:5432` **directo** |
+| **Dominios** | `elore.com.ar`, `www.elore.com.ar`, **`*.elore.com.ar`** (wildcard) |
+| **PM2** | `elore` (`next start -p 3700`) · `--max-old-space-size=384` |
+| **RAM medida** | 60 MB daemon (el proceso no apareció en la muestra) |
+
+**Particularidades:**
+- ✅ **Repo identificado el 2026-08-12: `git@github.com:AxiomaCloud/Elore.git`, rama `main`.** El clon en
+  axioma no tiene el remote configurado, pero el repositorio existe y el acceso está verificado. **Bloqueante
+  resuelto.** *Acción: correr `git remote add origin` en `/var/www/elore` para que no vuelva a perderse.*
+- 🔴 **Su `ecosystem.config.js` NO está en el repo** — existe solo en axioma, y ahora en
+  [`config/axioma/pm2/`](../config/axioma/). **Consecuencia grave:** el repo usa
+  `America/Argentina/Buenos_Aires` en el código (`sla.ts`, `business-hours/route.ts`), pero **la TZ del
+  proceso la fija el ecosystem**. Desplegar elore solo desde el repo lo arranca en **UTC**, y el horario
+  laboral del SLA —que se calcula con `setHours`/`getDay` sobre la TZ del proceso— **queda mal en
+  silencio**. No falla: da resultados incorrectos. Es el mismo patrón que mediflow, pero **invisible**.
+- **`TZ: 'America/Argentina/Buenos_Aires'` se fija en el ecosystem, antes de arrancar Node.** El horario
+  laboral del SLA se calcula con la TZ del proceso (`setHours`/`getDay`), no con `BusinessHours.timezone`.
+  **Si se omite, los SLA se calculan mal en silencio** — no falla, da resultados incorrectos.
+- El **certificado wildcard** `*.elore.com.ar` requiere validación **DNS-01**, no HTTP-01: `certbot --nginx`
+  no alcanza. Necesita el plugin de DNS de Cloudflare y acceso a la API (K8).
+- Tiene `.next.bak` en axioma — restos de un despliegue anterior, no replicar.
+
+---
+
+## 💬 evolution-api — PRIORIDAD 4 (terceros)
+
+| | |
+|---|---|
+| **Path** | `/var/www/evolution-api` |
+| **Usuario** | `evolutionapp` (996) |
+| **Puerto** | `8080` |
+| **Base** | `evolution` (vía `DATABASE_CONNECTION_URI`) |
+| **Dominio** | `evolution.axiomacloud.com` |
+| **Repo** | `EvolutionAPI/evolution-api` (upstream público) |
+| **RAM medida** | **330 MB + 43 MB + 62 MB daemon ≈ 435 MB** — el más pesado después de parse |
+
+**Particularidades:**
+- **Software de terceros.** No se compila desde el repo propio: se despliega la versión publicada.
+  **Verificar qué versión corre en axioma antes de desplegar otra.**
+- Arranca con `tsx` (TypeScript en runtime), no con build compilado.
+- Su `AUTHENTICATION_API_KEY` es el `whatsappApiKey` que aparece **filtrado en los logs de mini** (S18):
+  rotarlo en el DR.
+- Tiene 2 críticas y 15 altas de vulnerabilidades — las más del parque — y **su remediación depende del
+  upstream**, no del equipo.
+- `evolution-api-out.log` llegó a **246 MB** en axioma con tokens en claro: configurar logrotate desde el
+  inicio en drp.
+- 👉 **Candidata a NO levantar en la primera hora del DR.** Es la que más RAM pide y la que menos
+  bloquea al resto.
+
+---
+
+## 🔌 axio-db-agent — PRIORIDAD 4
+
+| | |
+|---|---|
+| **Path** | `/opt/axio-db-agent` |
+| **Usuario** | `axioapp` (998) |
+| **Puerto** | `3005` (loopback) |
+| **Arranque** | **`axio-db-agent.service`** — systemd, **no PM2** |
+| **Publicación** | nginx → `https://prd.axiomacloud.com/axio-agent` |
+| **RAM medida** | 79 MB + 51 MB daemon |
+
+**Particularidades:**
+- 🔴 **Accede a 4 bases productivas**: `mini_db`, `mediflow_db` (vía `ALVERA_DATABASE_URL`), `parse_db` y
+  `elore_db` — **conectando como el rol owner de cada una**.
+- Su control de acceso es un blocklist en variables de entorno (`*_BLOCKED_TABLES`, `*_BLOCKED_COLUMNS`)
+  que **no incluye ninguna tabla clínica** (R14, [G8 §5.2.2](./gobierno/g8-clasificacion-datos.md)).
+- La unidad systemd tiene hardening: `ProtectSystem=strict`, `NoNewPrivileges`, `ProtectHome`.
+  **Replicarlo** — no arrancarlo a mano.
+- Auth por header `x-agent-key` (`AGENT_API_KEY`).
+- 👉 **Recomendación para el DR: no levantarlo, o levantarlo con el blocklist corregido.** Es un canal de
+  acceso a datos de salud cuyo control está pendiente de remediación (**A11**). Un DR es mal momento para
+  replicar un problema conocido.
+
+---
+
+## 📁 Estáticos — PRIORIDAD 5
+
+| Sitio | vhost | Origen | Repo |
+|---|---|---|---|
+| `checkpoint.axiomacloud.com` | `checkpoint` | `/var/www/checkpoint/checkpoint` | `AxiomaCloud/checkpointsite` |
+| `axioma.ar` / `www.axioma.ar` | `axioma.ar` | `/var/www/mini/web` | *(parte de mini)* |
+| `axiomaweb.axiomacloud.com` | — *(a confirmar)* | — | `rodrigomnaranjo/axioma-corporate` |
+| `prd.axiomacloud.com` | `prd.axiomacloud.com` | proxy a `axio-db-agent` | — |
+
+Son copias de directorios más un vhost. **La parte rápida del DR**: sin base, sin build, sin PM2.
+
+> ⚠️ `checkpoint_db` existe en el cluster, así que checkpoint **puede** no ser solo estático.
+> **(a confirmar)** antes del primer simulacro.
+
+---
+
+## Huecos conocidos de estas fichas
+
+Se listan explícitamente para que el primer simulacro los cierre, en vez de descubrirlos en un incidente:
+
+1. 🔴 **elore no tiene remote de git.** Sin resolverlo, no se puede recuperar.
+2. 🔴 **4 bases sin app identificada**: `axiomadocs`, `chequescloud`, `iasqlassistant_db`, `core_db`.
+3. **checkpoint** — usuario, puerto y si consume `checkpoint_db`.
+4. **evolution-api** — versión exacta desplegada y su rol de PostgreSQL.
+5. **Puerto del backend de mini**: el `.env` dice `8095`, pero el vhost de `mini.axiomacloud.com` no
+   declara `proxy_pass` a un puerto. Verificar cómo se sirve realmente.
+6. **`GOOGLE_APPLICATION_CREDENTIALS` de parse** — a qué archivo apunta y dónde se respalda.
+7. **Certificado wildcard de elore** — requiere DNS-01; confirmar acceso a la API de Cloudflare.
+
+---
+
+*Fichas relevadas el 2026-08-11 desde axioma en vivo · **ninguna ejecutada**. Documento hermano del
+[runbook general](./drp-recuperacion-axioma-en-drp.md).*
