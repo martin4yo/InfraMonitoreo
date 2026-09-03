@@ -309,6 +309,18 @@ código). Ver "Pendientes dev-1" abajo.
 > en esta pasada mató la sesión de verificación (sin consecuencias, el dead-man ya estaba cancelado por PID).
 > Riesgo **R23** en G3.
 
+> ⚠️ **2026-09-03 — la causa raíz era más amplia y la ventana de reboot la confirmó.** Al reiniciar los 5
+> para activar los kernels pendientes, el relevamiento previo de axioma mostró `ufw status: active` pero
+> `systemctl is-enabled ufw` = **`disabled`** — y lo mismo en clubix. Es decir: el `systemctl enable ufw`
+> **nunca se corrió** al armar el firewall el 2026-07-17 en **ninguno de los 3 servers de donweb**; el
+> firewall estaba activo en caliente pero no anclado al arranque. dev-1 fue el primero en pagarlo (reboot
+> del 08-14). Se corrió `enable` en los 3 (dev-1 al re-habilitar; axioma y clubix **antes** de su reboot,
+> para no repetir el agujero). **Resultado de la ventana:** drp, axiodemo, dev-1 y axioma reiniciaron con
+> kernel nuevo y **ufw volvió `active`/`enabled` solo**, junto con fail2ban, las apps y `pgbackrest check`
+> 4/4. clubix quedó pendiente (en uso), ya con la unit `enabled`. **Hueco del selfcheck confirmado:**
+> `hardening-selfcheck.sh` mira `ufw active` pero **no** `is-enabled`, así que no habría detectado este
+> caso — ampliar la métrica a `is-enabled` + `reboot-required`.
+
 ### axioma-drp (170.78.75.249) — server bare + **REINSTALADO 2026-08-08, rearmado 2026-08-11**
 
 > 🔴 **Se reinstaló el sistema operativo el 2026-08-08** (boot 23:28 UTC), sin aviso ni registro previo.
