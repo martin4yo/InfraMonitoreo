@@ -477,9 +477,14 @@ password como acceso de emergencia. Control negativo OK. ⚠️ Una **reinstalac
 del cloud-init: agregarlo al checklist de rearmado.
 
 **Hallazgos colaterales, sin tocar (para C4 / A6):**
-- axioma: **cuentas con password activa** `miniapp`, `alveraapp` y **`hervierh`** (usuario no inventariado en
-  ningún doc). dev-1: `miniapp`. No sirven para SSH (`PasswordAuthentication no`) pero sí para `su` local y
-  para la consola del proveedor. Las cuentas `<app>app` no deberían tener password.
+- axioma: **cuentas con password activa** `miniapp`, `alveraapp` y `hervierh`. dev-1: `miniapp`. No sirven para
+  SSH (`PasswordAuthentication no`) pero sí para `su` local y para la consola del proveedor. Las cuentas
+  `<app>app` no deberían tener password. **Decisión del RT (2026-09-03): se dejan como están por ahora.**
+- **`hervierh`** (solo en axioma, creada el 2026-06-27, grupo `executive`, sin sudo, sin llave, 0 logins): es
+  una persona del equipo; la cuenta se hizo para que subiera contenido a una carpeta puntual del sitio de
+  axioma y nunca se usó. Su directorio `/var/www/html/executive` (clon de `axioma-corporate`) no lo sirve
+  ningún vhost. **Se deja.** Si se activa, el molde correcto es **SFTP enjaulado con llave**: `Match User
+  hervierh` + `ForceCommand internal-sftp` + `ChrootDirectory` sobre la carpeta destino, `passwd -l`.
 - dev-1: `axioapp` sigue **en el grupo `sudo`** (ya sin efecto práctico). Sacarlo: `gpasswd -d axioapp sudo`.
 - La misma regla `%sudo … ALL` con password sigue en los 3 para `linuxadmin`/`root`: correcto, es la de emergencia.
 
