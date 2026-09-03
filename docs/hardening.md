@@ -463,6 +463,25 @@ server sin auditarlo primero arranca las alarmas en rojo y se vuelve ruido que s
 > firewall del jail (`f2b-sshd` / tabla nft `f2b-table`) se crea recién con el **primer baneo**
 > (`actionstart_on_demand`), así que su ausencia justo después de arrancar no es un fallo.
 
+### 12.4 Monitoreo de archive-push del lado db host (2026-09-03)
+
+Motivado por el falso "repo1 roto" del 2026-09-03: el reboot de dev-1 cortó archive-push ~90 s, una sesión
+lo vio como error de repo1, y el monitoreo de pgBackRest **no avisó** — correctamente, porque fue un blip,
+pero destapó un punto ciego. El monitoreo de `netdata/pgbackrest/` (scripts/30) vive **solo en dev-1** y mira
+el repositorio: (1) si dev-1 cae, ese colector cae con él justo cuando archive-push empieza a fallar; (2) no
+mira el `pg_stat_archiver` de los db hosts, así que un push roto de verdad recién se vería a ~15 min por
+atraso de WAL y solo si dev-1 vive.
+
+**Cierre del hueco (`scripts/31-deploy-archive-monitoring.sh`):** un colector en **cada db host**
+(`archive-push-collect.py`, cron cada 5 min como `postgres`) que empuja a **su propio** Netdata la cola de
+WAL sin archivar (`.ready`), si archive-push está fallando (`last_failed >= last_archived`), y la edad del
+último archivado OK. Tres alarmas (`health.d/pgbackrest-archive.conf`) con ventana sostenida de **10 min**
+para **no** gritar por el blip de 90 s de un reboot: `archive_push_failing` (crit), `archive_backlog`
+(warn >10 / crit >50 `.ready`), `archive_sin_exito` (warn >2 h). **Desplegado y verificado en los 4 db hosts
+el 2026-09-03**: métricas vivas (`backlog=0`, `failing=0`) y alarmas enganchadas (axiodemo inicializó a CLEAR;
+el resto inicializa a CLEAR a medida que su cron llena la ventana). Ahora el aviso de "no puedo mandar mis
+backups" nace en el server que lo sufre, **independiente de dev-1**.
+
 ### 12.3 Validación
 
 `watchdog_hostkey_changed` se probó end-to-end simulando una reinstalación (huella falsa en una línea de base
