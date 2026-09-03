@@ -207,6 +207,16 @@ de exploración interactiva (el `bash_history` de root, continuo de enero a agos
 13–15 de julio), pero eso **no descarta** acceso a datos: `ssh host <cmd>` y `scp` no dejan rastro ahí.
 → **R20** en G3 · [G8 §4.2](./gobierno/g8-clasificacion-datos.md).
 
+> ✅ **dev-1 purgado el 2026-09-03.** Backup de ambos archivos en `/root/authorized_keys-bak-20260903-180023/`
+> (`700`). `axiomacloud`: de 54 llaves a **6** (0 donweb) — `axiomacloud@keysoft-i5`, `martin@windows`,
+> `rodrigomnaranjo@gmail.com` (BT), `martin4yo@dev-1-tally`, una sin comentario en línea seguida de una línea
+> suelta `claude-inframonitoreo@KEYSOFT-UBUNTU` (llave pegada con un salto de línea — funciona igual, prolijar),
+> y `mfourgeaux@KEYSOFT-I7` (la misma que en drp se trató como ajena el 08-11; **a confirmar por el RT**).
+> `root`: de 43 a **0** — no había una sola llave que no fuera de donweb. Verificado: sesión nueva por 22 y
+> 5782 OK, `root@dev-1` rechazado desde afuera, `pgbackrest check` OK en las 4 stanzas (la confianza SSH de
+> pgBackRest vive en el usuario `pgbackrest`, 4 llaves, intacto). **axioma y clubix siguen con ~43 llaves de
+> donweb en `root`** (inertes por `PermitRootLogin no`) — misma pasada pendiente de OK.
+
 **11.2 ✅ RESUELTO 2026-08-13 — cambio de `sshd` escrito y nunca aplicado.**
 El 2026-08-09 20:54 se creó `/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf` en los **4 servers**
 con `Match User axiomacloud` + `PasswordAuthentication yes`. **Nunca tomó efecto**: `sshd` no se recargó
