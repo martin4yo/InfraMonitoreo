@@ -29,7 +29,7 @@
 | **C8** | **Verificación de backups** — `pgbackrest check` en las 4 stanzas + frescura | Continua (alarmas Netdata) + confirmación en el drill mensual | RT | [G1 §6](./g1-politica-seguridad.md) | Netdata Cloud + C1 |
 | **C9** | **Ejercicio de incidente simulado** | Anual | RT + BT | [G5 §8](./g5-respuesta-incidentes.md) | §7 de este documento |
 | **C10** | **Revisión del inventario de secretos y rotación programada** | Semestral (inventario) · según [G7 §4](./g7-rotacion-secretos.md) (rotación) | RT | [G7](./g7-rotacion-secretos.md) | G7 §5 (registro de rotaciones) |
-| **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 de este documento |
+| **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 · **alarma `watchdog_reboot_pendiente`** (selfcheck, avisa a las 24 h) desde 2026-09-03 |
 | **C12** | **Prueba de continuidad** — restaurar el kit desde los respaldos declarados, en equipo limpio | Semestral | **BT** (no el RT) | [G9 §6](./g9-continuidad-negocio.md) | §7 de este documento |
 
 ### 1.1 Anclaje del calendario
