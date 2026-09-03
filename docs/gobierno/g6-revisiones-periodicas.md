@@ -182,6 +182,7 @@ caso de **dev-1** por ser el repo host de todos los backups. A resolver en la pr
 
 | Fecha | Ejecutor | Alcance | Hallazgos | Resultado |
 |---|---|---|---|---|
+| **2026-09-03** | martin4yo | **Spot-check parcial (no es la C4 completa)** — los 5 servers, solo lectura: `sshd -T`, `sshd_config.d`, `authorized_keys`, sudoers, ufw, fail2ban, listeners, PG (`password_encryption`, roles md5), `.env` world-readable, db-agent, reboot pendiente | 🔴 **dev-1 sin firewall de host desde el reboot del 08-14** (unit `ufw` disabled) → **re-habilitado el mismo día**, R23 · 🔴 48 llaves donweb siguen en `axiomacloud` de dev-1 (A10 abierta) · 🟠 **alvera ya migró en axioma** (`/var/www/alvera`, `alveraapp`, `/var/www/mediflow` no existe) y app nueva **tally** (02-09): docs, `config/axioma/` e `infra-secrets` desactualizados · 🟠 reboot pendiente en 5/5 (axioma/clubix kernel 185 con 190 instalado) · 🟡 fail2ban inactivo en axioma y axiodemo · 🟡 `%sudo NOPASSWD` en axioma/clubix/dev-1 · 🟡 db-agent de clubix corre como `axiomacloud` · 🟡 mini en dev-1 volvió a `root 777` (1245 archivos no-miniapp) + `.env.bak-20260718-*` sin barrer · 🟡 `log_connections=off` en los 5, `auditd` inactivo en 4/5 | 🟡 **Relevado; 3 remediados el mismo día:** ufw en dev-1, `hardening-selfcheck.sh` desplegado en los 5 (cobertura 1 → 5), fail2ban habilitado en axioma e instalado en axiodemo. El resto queda para decisión/ventana |
 | _pendiente_ | — | — | — | ⬜ Primera auditoría formal programada **2026-10-23** |
 
 ## 6. Registro de revisiones documentales (C6 / C7)

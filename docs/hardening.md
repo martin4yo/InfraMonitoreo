@@ -250,7 +250,7 @@ la base y de todos sus objetos**, y es el rol de la contraseña débil de 8 cara
 | # | Hallazgo | axioma | clubix | axiodemo | axioma-drp | dev-1 |
 |---|----------|--------|--------|----------|------------|-------|
 | 1 | pg_hba / listen | 🟢 ✅ **loopback + scram (fix 2026-07-22)**, bind localhost, 0 líneas `md5` (residual mediflow cerrado el mismo día) | 🟢 deny + scram, `listen=localhost` | 🟡 acotado + scram, `listen='*'` (lo salva ufw) | ⬜ sin Postgres | 🟢 `listen=localhost`, solo loopback + scram |
-| 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) |
+| 2 | Firewall | ✅ ufw active, allow 22/5408/80/443 | ✅ ufw active, allow 2222/80/443 | 🟢 ufw active + allowlist | ✅ **ufw active** allow 22/80/443 (fix 2026-07-17) | ✅ **ufw active** allow 22/5782/80/443 + snmp 161 solo dattaweb (fix 2026-07-17) · ⚠️ **estuvo inactivo 08-14 → 09-03** (unit `disabled`, no cargó al reboot); re-habilitado 2026-09-03 |
 | 3 | SSH root/password | 🟡 `sshd -T` OK, pero con `99-temp-password…conf` latente (§11.2) | 🟡 ídem | 🟡 ídem | ✅ root+pass `no` (homologado) | 🟡 ídem (fix 2026-07-17) |
 | 3b | **Llaves en `authorized_keys`** *(nuevo 2026-08-09, §11.1)* | 🟡 root **46** (43 donweb, inertes) · axiomacloud 6 | 🟡 root **43** (44 donweb, inertes) · axiomacloud 8 | 🟢 root **0** · axiomacloud 5 | ⬜ no relevado (22 filtrado) | 🔴 **axiomacloud 53, 48 de donweb, con sudo sin password** · root 43 |
 | 4 | App en `0.0.0.0` | 🟡 `:8087` ✅ **loopback (2026-07-20)**; netdata ✅ loopback. Quedan `:3700` elore, `:8089` hub, `:8080` evolution-api, `:5300` mediflow | 🟡 19999, 25 | 🟡 `:5300` axio-back (needs código), `:8001` axio-ml **excepción aceptada** (dev-1 lo consume remoto); netdata ✅ loopback | 🟡 sshd + netdata `:19999` en `0.0.0.0` (tapado por ufw — relevado 2026-07-22; netdata se instaló post-foto del 07-17) | 🟡 **firewall tapa todo** (fix 2026-07-17). ✅ **CUPS `:631` deshabilitado + netdata loopback (2026-07-20)**. Quedan `:3000` elore, `:8087` parse, `:8089` hub (bloqueadas por patrón Next `-H`), `:8086`/`:5000` (needs código) |
@@ -276,6 +276,23 @@ a los secretos). Los 🔴 iniciales tras el fix SSH (3 `.env` de mini en 777, fi
 2026-07-17 (P1/P2 abajo). **Pendientes vigentes (mitigados por el fw)**: snmpd community `public` (H09,
 bloqueado por dattaweb), apps Node/Next en `0.0.0.0` (H04, patrón `-H`/redirects + 3 que requieren cambio de
 código). Ver "Pendientes dev-1" abajo.
+
+> ⚠️ **2026-09-03 — el firewall de dev-1 estuvo INACTIVO 20 días sin que nadie lo viera.** Detectado en un
+> spot-check de solo lectura: `ufw status` → *inactive*, `iptables -P INPUT ACCEPT`, y la unit `ufw.service`
+> **`disabled`**. Causa: el server **rebooteó el 2026-08-14 13:45** (reboot no registrado en ningún doc) y
+> la unit no estaba habilitada al arranque, así que las reglas —que seguían intactas en `user.rules`, con la
+> allowlist exacta del 07-17— nunca se cargaron. Desde afuera los puertos de apps seguían filtrados **solo**
+> por el firewall de red del proveedor: la defensa en profundidad funcionó, pero una de las dos capas no estaba.
+> **Re-habilitado el 2026-09-03 16:46** con el método de §2 (backup `/root/ufw-bak-20260903-164530` +
+> `iptables-bak`, dead-man switch de 240 s cancelado por PID, `ufw --force enable` + `systemctl enable --now ufw`).
+> Verificado desde afuera con **sesión nueva por 22 y 5782**, HTTPS 200, 8087/3000/5432/19999 cerrados, y
+> `pgbackrest check` OK en las **4 stanzas**. Netdata, fail2ban y snmpd intactos.
+> **Lecciones:** (1) `ufw enable` no garantiza la unit `enabled` — verificar `systemctl is-enabled ufw` como
+> parte del cierre (regla R7 de G10: estado efectivo, y **estado tras reboot**); (2) el `hardening-selfcheck.sh`
+> de §12.2 habría avisado en 15 min y **solo corre en axioma-drp** — desplegarlo en los 5 es la acción pendiente
+> más barata; (3) nunca `pkill -f` con un patrón que aparece en la línea de comando de la propia sesión SSH:
+> en esta pasada mató la sesión de verificación (sin consecuencias, el dead-man ya estaba cancelado por PID).
+> Riesgo **R23** en G3.
 
 ### axioma-drp (170.78.75.249) — server bare + **REINSTALADO 2026-08-08, rearmado 2026-08-11**
 
@@ -385,7 +402,7 @@ detecta la reinstalación aunque el server esté perfectamente vivo.
 - **Tras una reinstalación legítima**: `hostkey-watchdog.py --reseed <server>` en dev-1, y asentarlo acá.
   Nunca re-sembrar sin confirmar por un canal independiente que la reinstalación era esperada.
 
-### 12.2 Auto-chequeo local (hoy solo en axioma-drp) — `hardening-selfcheck.sh`
+### 12.2 Auto-chequeo local (en los 5 desde 2026-09-03) — `hardening-selfcheck.sh`
 
 Cron cada 15 min, como root. Mira hacia adentro y empuja a su propio Netdata: `ufw` activo, `fail2ban`
 activo **y con el jail sshd realmente levantado** (chequear solo el servicio no alcanza: es exactamente el
@@ -396,6 +413,28 @@ el agente Netdata claimed+online. Cinco alarmas, una por control, para que el me
 **Límite conocido**: si el server se reinstala, esta pieza desaparece con él. Por eso el control de "server
 ausente" es el de dev-1, no éste. Se despliega solo donde el estado esperado está verificado — sumarlo a un
 server sin auditarlo primero arranca las alarmas en rojo y se vuelve ruido que se ignora.
+
+> ✅ **Desplegado en los 5 el 2026-09-03**, a raíz de los 20 días de dev-1 sin firewall (ver §dev-1). Se corrió
+> solo la parte 3 de `scripts/35-deploy-watchdog.sh` (sin re-sembrar la línea de base de host keys, que estaba
+> sana). Resultado de la primera corrida estable: **clubix, dev-1 y axioma-drp `ok=1`**; **axioma y axiodemo
+> `ok=0` por `fail2ban=0`** — y es un hallazgo real, no ruido: en axioma fail2ban está instalado con config
+> válida pero la unit está `disabled`; en axiodemo **no está instalado**. El dossier (CIS 8) afirmaba
+> *"fail2ban en los 5"*. Las 5 alarmas quedaron enganchadas en los 5 servers (`netdatacli reload-health` tras
+> la primera métrica). **Cobertura del selfcheck: 5 de 5.**
+>
+> ✅ **fail2ban cerrado el mismo día (2026-09-03).** axioma: `jail.local` reescrito (backup `.bak-20260903-174818`)
+> con `bantime=1h`, `findtime=10m`, `maxretry=5`, las 6 IPs de la infra en `ignoreip` y **`port = 22,5408`** (el
+> jail por defecto solo cubría el 22; el server también escucha SSH en 5408) → `enable --now`, jail sshd leyendo
+> `auth.log` por pyinotify. axiodemo (Ubuntu 24.04): instalado `fail2ban 1.0.2` + `jail.local` con
+> `backend=systemd` y la misma política; `banaction=nftables` por defecto de la distro. **Tropiezo registrado:**
+> el paquete arrancó el servicio al instalarse, segundos *antes* de que se escribiera el `jail.local`, y el
+> `enable --now` posterior no reinició nada → corría con `bantime=600` y **sin `ignoreip`** (verificado con
+> `fail2ban-client get sshd bantime/ignoreip`, no con el archivo). Corregido con `fail2ban-client reload`. Es la
+> regla **R7 de G10** una vez más: *un cambio escrito no es un cambio aplicado*. Contexto: axiodemo tenía **896
+> intentos fallidos de SSH en 24 h** sin ningún rate-limiting. Resultado: selfcheck **`ok=1` en los 5 servers**;
+> las dos alarmas `watchdog_fail2ban_caido` pasan a CLEAR tras el `delay down 30m`. Nota: la cadena/regla de
+> firewall del jail (`f2b-sshd` / tabla nft `f2b-table`) se crea recién con el **primer baneo**
+> (`actionstart_on_demand`), así que su ausencia justo después de arrancar no es un fallo.
 
 ### 12.3 Validación
 

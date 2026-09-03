@@ -22,12 +22,13 @@ load_inventory
 
 NETDATA_DIR="$ROOT_DIR/netdata"
 WATCHDOG_HOST="${WATCHDOG_HOST:-dev-1}"
-# Servers donde además corre el auto-chequeo local. Sumar uno solo después de
-# verificar que su hardening está en el estado que las alarmas dan por bueno.
+# Servers donde además corre el auto-chequeo local. Desde el 2026-09-03 son los 5:
+# se desplegó después de verificar el estado de cada uno, y donde un control estaba
+# caído (fail2ban en axioma y axiodemo) la alarma en rojo es correcta, no ruido.
 # (Se expande así, y no con :-, porque con `set -u` una variable de array sin
 # definir en el entorno aborta el script en bash < 4.4.)
 if [[ -z ${WATCHDOG_SELF_SERVERS[@]+x} || ${#WATCHDOG_SELF_SERVERS[@]} -eq 0 ]]; then
-  WATCHDOG_SELF_SERVERS=("axioma-drp")
+  WATCHDOG_SELF_SERVERS=("axioma" "clubix" "axiodemo" "dev-1" "axioma-drp")
 fi
 
 # ---------------------------------------------------------------------------
