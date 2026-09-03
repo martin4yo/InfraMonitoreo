@@ -214,8 +214,13 @@ de exploración interactiva (el `bash_history` de root, continuo de enero a agos
 > y `mfourgeaux@KEYSOFT-I7` (la misma que en drp se trató como ajena el 08-11; **a confirmar por el RT**).
 > `root`: de 43 a **0** — no había una sola llave que no fuera de donweb. Verificado: sesión nueva por 22 y
 > 5782 OK, `root@dev-1` rechazado desde afuera, `pgbackrest check` OK en las 4 stanzas (la confianza SSH de
-> pgBackRest vive en el usuario `pgbackrest`, 4 llaves, intacto). **axioma y clubix siguen con ~43 llaves de
-> donweb en `root`** (inertes por `PermitRootLogin no`) — misma pasada pendiente de OK.
+> pgBackRest vive en el usuario `pgbackrest`, 4 llaves, intacto).
+>
+> ✅ **axioma y clubix purgados el mismo día.** clubix `root`: 43 → **0** (todas donweb). axioma `root`: 46 → **3**
+> — `martin@windows` y `mfourgeaux@KEYSOFT-I7` **dos veces** (duplicada; prolijar). Backups en
+> `/root/authorized_keys-bak-20260903-1803*/root`. Verificado en los 3: `root@<ip>` rechazado desde afuera,
+> sesión nueva de `axiomacloud` OK, `pgbackrest check` OK. **R19 cerrado** — el acceso latente ya no existe,
+> con o sin `PermitRootLogin`. La comparativa (fila 3b) queda desactualizada a propósito como foto del 08-09.
 
 **11.2 ✅ RESUELTO 2026-08-13 — cambio de `sshd` escrito y nunca aplicado.**
 El 2026-08-09 20:54 se creó `/etc/ssh/sshd_config.d/99-temp-password-axiomacloud.conf` en los **4 servers**
