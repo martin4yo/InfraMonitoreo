@@ -457,6 +457,32 @@ server sin auditarlo primero arranca las alarmas en rojo y se vuelve ruido que s
 de `/tmp`, sin tocar la real): pasó a **CRITICAL en 20 segundos**. Las 7 alarmas quedaron en CLEAR con la
 línea de base real. Una alarma que nunca se vio disparar no es un control.
 
+## 13. Sudo y cuentas privilegiadas — pasada del 2026-09-03
+
+**Motivo.** El spot-check mostró `%sudo ALL=(ALL:ALL) NOPASSWD:ALL` en axioma, clubix y dev-1: cualquier cuenta
+que entre al grupo `sudo` es root sin password. En dev-1 eso ya pasaba: **`axioapp`, una cuenta de aplicación,
+estaba en el grupo `sudo`**. En axioma-drp, la cuenta `ubuntu` del cloud-init tenía `NOPASSWD:ALL` **seis veces**
+en `90-cloud-init-users` y pertenecía a `sudo` y `lxd` (ambos equivalen a root), sin llaves ni password.
+
+**Aplicado (axioma, clubix, dev-1), en dos pasos con sesión nueva entre medio:**
+1. `/etc/sudoers.d/90-axiomacloud` (`440`): `axiomacloud ALL=(ALL:ALL) NOPASSWD:ALL`, validado con `visudo -cf`,
+   y **verificado `sudo -n true` desde una sesión nueva** antes de tocar el archivo principal.
+2. `/etc/sudoers`: `%sudo ALL=(ALL:ALL) NOPASSWD:ALL` → `%sudo ALL=(ALL:ALL) ALL` (editado sobre copia temporal,
+   `visudo -cf`, instalado con `install -m 440`). Backup en `/root/sudoers.bak-20260903-1811*`. Verificado de
+   nuevo en sesión nueva. Control negativo en dev-1: `sudo -u axioapp sudo -n true` → *password is required*.
+
+**Aplicado (axioma-drp):** `90-cloud-init-users` retirado (backup `/root/sudoers-bak-20260903-211206/`), `ubuntu`
+sacado de `sudo` y `lxd`. Queda `axiomacloud` con `NOPASSWD` (regla del 08-11) y `linuxadmin` con sudo por
+password como acceso de emergencia. Control negativo OK. ⚠️ Una **reinstalación** vuelve a traer el archivo
+del cloud-init: agregarlo al checklist de rearmado.
+
+**Hallazgos colaterales, sin tocar (para C4 / A6):**
+- axioma: **cuentas con password activa** `miniapp`, `alveraapp` y **`hervierh`** (usuario no inventariado en
+  ningún doc). dev-1: `miniapp`. No sirven para SSH (`PasswordAuthentication no`) pero sí para `su` local y
+  para la consola del proveedor. Las cuentas `<app>app` no deberían tener password.
+- dev-1: `axioapp` sigue **en el grupo `sudo`** (ya sin efecto práctico). Sacarlo: `gpasswd -d axioapp sudo`.
+- La misma regla `%sudo … ALL` con password sigue en los 3 para `linuxadmin`/`root`: correcto, es la de emergencia.
+
 ### Bien por server (no tocar)
 - **clubix**: pg_hba deny explícito + scram; Node (5400)/PG (5432) en loopback; `.env` 600; fail2ban en 2222.
 - **axiodemo**: ufw active + allowlist; PG externo restringido a `149.50.148.198` (dev-1, para `axio_ml`); ollama en loopback.
