@@ -42,7 +42,7 @@
 | **Path** | `/var/www/alvera` (backend en `/backend`, frontend en `/frontend`) |
 | **Usuario** | `alveraapp` (uid 1000) — ⚠️ único con grupo suplementario `www-data` |
 | **Puerto** | `5300` |
-| **Base / rol** | `alvera_db` / `alverauser` — ⚠️ **`alvera_db` es owner `postgres`, NO `alverauser`** (desvío del estándar §9, ver hallazgo abajo) |
+| **Base / rol** | `alvera_db` / `alverauser` — ✅ owner `alverauser` (base + schema + 78 tablas; corregido 2026-09-03) |
 | **Conexión** | `localhost:**6432**` (pgbouncer) + `?pgbouncer=true` |
 | **Dominios** | `alvera.axiomacloud.com`, `api.alvera.axiomacloud.com`, `alvera.com.ar`, `www.alvera.com.ar` |
 | **vhosts** | `alvera`, `alvera.com.ar` |
