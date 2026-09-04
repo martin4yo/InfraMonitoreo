@@ -60,16 +60,17 @@ salud son **permanentemente ilegibles** y ningún backup lo resuelve.
 > *detenido en la capa pública*— en realidad **se completó**: `mediflow_db → alvera_db` (42 MB),
 > `mediflowuser → alverauser`, `mediflowapp → alveraapp`, `pm2-mediflowapp → pm2-alveraapp`,
 > `/var/www/mediflow → /var/www/alvera`, y repo nuevo `AxiomaCloud/Alvera`. **Dos hallazgos operativos del
-> mismo relevamiento** (pendientes de decisión, no tocados):
-> 1. 🔴 **El `axio-db-agent` quedó roto para alvera**: su `.env` sigue apuntando a `mediflow_db` (borrada) y
->    al schema `/var/www/mediflow/...` (inexistente). Log de arranque: `alvera ❌ sin conexión` (mini/elore/
->    parse ✅). Roto desde el rename; nadie lo vio. Efecto lateral: **R14 queda neutralizado para alvera**
->    mientras el agente no conecte — vuelve si se lo repunta a `alvera_db`.
-> 2. 🟡 **`alvera_db` es owner `postgres`, no `alverauser`** (el rename/migración se hizo como `postgres`):
->    desvío del estándar §9, bomba latente de `permission denied` en la próxima migración de la app.
+> mismo relevamiento — ✅ ARREGLADOS 2026-09-03** (backup + verificación):
+> 1. El `axio-db-agent` estaba roto para alvera (`.env` apuntaba a `mediflow_db` borrada y a
+>    `/var/www/mediflow`). **Repuntado a `alvera_db`/`alverauser`/`/var/www/alvera`** → `alvera ✅ conectado`,
+>    4/4 apps, 406 tablas. ⚠️ Al reconectar, **R14 vuelve a estar vigente** (el agente lee `alvera_db`); la
+>    remediación de fondo es A11 (rol de solo lectura por columna).
+> 2. `alvera_db` era owner `postgres`. **Cambiado a `alverauser`** (base + schema + 5 tablas; extensiones
+>    `plpgsql`/`uuid-ossp` quedan en `postgres`). 78 tablas de `alverauser`, 0 de `postgres`, app 200, agente OK.
 >
-> **R06:** el rol débil era `mediflowuser`; ahora es `alverauser`. **Reverificar si la contraseña débil se
-> arrastró al rename** antes de darlo por rotado.
+> **Pendientes:** **R06** — el rol débil era `mediflowuser`, ahora `alverauser`; reverificar si la contraseña
+> débil se arrastró al rename. **`api.alvera.axiomacloud.com` sin registro DNS** (el vhost lo declara, `dig`
+> no resuelve) — verificar si la API se sirve por otro nombre o si el subdominio es vestigial.
 
 > **La verificación de §9.3 del runbook no es opcional para esta app.** Es la única que distingue una
 > recuperación exitosa de una que *parece* exitosa. Riesgo **R15**.
