@@ -64,6 +64,15 @@ Norma principal aplicable. Puntos que impactan directamente a esta infraestructu
 > Fuente del inventario: [DRP Apéndice A](../disaster-recovery-plan.md) (tomado 2026-07-04).
 > **La columna "Contenido" es inferida del dominio funcional de la app**, salvo donde se indica.
 
+> ### ⚠️ ACTUALIZACIÓN 2026-09-03 — el rename se COMPLETÓ (esta nota quedó obsoleta)
+>
+> Verificado en vivo: `mediflow_db → alvera_db`, `mediflowuser → alverauser`, `mediflowapp → alveraapp`,
+> `/var/www/mediflow → /var/www/alvera`, repo `AxiomaCloud/Alvera`. **`mediflow_db` ya no existe** en axioma
+> ni en dev-1. La tabla de abajo describe el estado *previo* al 2026-09-03 y se conserva como referencia
+> histórica: **hoy todo dice `alvera`, incluida la base 🔴.** Consecuencia para el DR: *"recuperá alvera"*
+> ahora se busca por `alvera_db` y `/var/www/alvera`, no por `mediflow`. Y **el `axio-db-agent` quedó roto
+> para alvera** porque su `.env` sigue apuntando a `mediflow_db` (§5.2.2). Riesgo consolidado **R25** en G3.
+>
 > ### 📌 Nota de nomenclatura — **alvera = mediflow**
 >
 > La aplicación se llama **alvera**. `mediflow` es el **nombre anterior**, que sobrevive en la
@@ -90,7 +99,7 @@ Norma principal aplicable. Puntos que impactan directamente a esta infraestructu
 
 | Base | Contenido (inferido) | Clasificación | Justificación |
 |---|---|---|---|
-| `mediflow_db` **(app: alvera)** | Gestión médica — pacientes, prestaciones | 🔴 **Sensible** **(a confirmar)** | Datos de salud → art. 7. **Máxima prioridad de validación.** Ver nota de nomenclatura arriba: la app se llama **alvera**, la base conserva el nombre anterior |
+| `alvera_db` **(app: alvera; ex `mediflow_db`)** | Gestión médica — pacientes, prestaciones | 🔴 **Sensible** **(a confirmar)** | Datos de salud → art. 7. **Máxima prioridad de validación.** ⚠️ **Rename completado 2026-09-03:** `mediflow_db` ya no existe; la base 🔴 es **`alvera_db`** (42 MB, cifrada en reposo, owner `postgres` — desvío §9). Ver nota de nomenclatura |
 | `mini_db` | App de gestión con facturación | 🟠 Confidencial | PII de clientes + datos de transacciones. ⚠ **Corregido 2026-08-09:** decía "y pagos (MercadoPago)". La integración de pago existe en el código pero **no está configurada** — `mercadopago_config` está **vacía** y `mini-backend.env` no tiene credenciales de la pasarela ([hardening §9](../hardening.md), [G7 §3.2](./g7-rotacion-secretos.md)). Quien procesa pagos es **clubix** |
 | `chequescloud` | Gestión de cheques | 🟠 Confidencial | Datos financieros e identificatorios |
 | `core_db` | Núcleo transversal — usuarios/cuentas | 🟠 Confidencial **(a confirmar)** | Probable PII de usuarios del ecosistema |
@@ -247,7 +256,7 @@ inventario de secretos mostró que **no es así**:
 
 | Canal | Alcance | Control actual | Evaluación |
 |---|---|---|---|
-| App `mediflow` | `mediflow_db` | Rol `mediflowuser`, loopback, `scram-sha-256` | ✅ Esperado. ⚠ Su password es **débil** (8 caracteres, R06) |
+| App `alvera` (ex mediflow) | `alvera_db` | Rol `alverauser`, loopback, `scram-sha-256` | ✅ Esperado. ⚠ Reverificar si la password débil de `mediflowuser` (R06) se arrastró a `alverauser` en el rename del 2026-09-03 |
 | **`axio-db-agent`** (`/opt`, **axioma**) | **4 bases productivas**: `mini_db`, **`mediflow_db`** (vía `ALVERA_DATABASE_URL`), `parse_db`, `elore_db` | `*_BLOCKED_TABLES` / `*_BLOCKED_COLUMNS` en su `.env` + auth por `x-agent-key` + `User=axioapp` con hardening systemd + publicado por nginx en `https://prd.axiomacloud.com/axio-agent` | 🔴 **R14 — verificado y peor de lo supuesto.** Ver §5.2.2 |
 | **`axio-db-agent`** (`/opt`, **clubix**) | `clubix_db` | Mismo esquema, `SERVER_NAME="Servidor Clubix"` | ⚠️ **Segunda instancia, no documentada.** `hardening.md` afirmaba *"hay un solo agente, en axioma; en clubix y axiodemo no existe"*. Está **`enabled` y `active` desde 2026-07-24** — un día después de entregar el dossier al auditor. Deriva post-entrega |
 

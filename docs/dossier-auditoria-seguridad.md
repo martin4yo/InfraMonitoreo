@@ -129,7 +129,8 @@ Quedan hallazgos técnicos de defensa en profundidad (apps Next.js aún en
 | elore | axioma | eloreapp | 3700 | elore_db | ⚠ sin remote git | menor (F5); bloqueante F7 |
 | evolution-api | axioma | evolutionapp | 8080 | evolution | EvolutionAPI/evolution-api (tercero) | setup separado (F6) |
 | **hub** | axioma | hubapp | 5200 + 8089 | hub_db | AxiomaCloud/ProHub (SSH) | ✅ estandarizada (F4) |
-| mediflow | axioma | mediflowapp | 5300 | mediflow_db | martin4yo/mediflow | casi estándar |
+| **alvera** *(ex mediflow)* | axioma | alveraapp | 5300 | **alvera_db** | AxiomaCloud/Alvera | ⚠️ rename completo 2026-09-03; `alvera_db` owner `postgres` (§9) |
+| **tally** *(ex rendiciones)* | axioma + dev-1 | tallyapp | 5050+8084 | tally_db | martin4yo/Rendiciones | app nueva ~09-02; estándar aplicado |
 | mini | axioma | miniapp | 8095 | mini_db | martin4yo/AxiomaWeb | owner ✅; `.cjs`→`.js` pend. |
 | parse | axioma | parseapp | 5100 + 8087 | parse_db | martin4yo/parse | estándar ✅ |
 | clubix | clubix | clubixapp | 5400 | clubix_db | martin4yo/rojoplus | casi estándar |
@@ -142,7 +143,7 @@ Quedan hallazgos técnicos de defensa en profundidad (apps Next.js aún en
 
 | Stanza | Server | PG | # bases | Bases principales (tamaño aprox.) |
 |---|---|---|---|---|
-| **AxiomaCloudProd** | axioma | 14 | 11 | mini_db (113M), parse_db (77M), mediflow_db (18M), elore_db (13M), **hub_db (12–15M)**, axiomadocs (11M), chequescloud (11M), iasqlassistant_db (10M), checkpoint_db (10M), evolution (10M), core_db (8.6M) |
+| **AxiomaCloudProd** | axioma | 14 | 12+ | mini_db (113M), parse_db (77M), **alvera_db (42M, ex `mediflow_db`)**, **tally_db (11M, nueva)**, elore_db (13M), **hub_db (12–15M)**, axiomadocs (11M), chequescloud (11M), iasqlassistant_db (10M), checkpoint_db (10M), evolution (10M), core_db (8.6M) · ⚠️ inventario al 2026-09-03; regenerar el Apéndice A |
 | **clubix** | clubix | 14 | 1 | clubix_db (198M) — producción real |
 | **axiodemo** | axiodemo | 16 | 2 | axio_db (8.9M), axio_ml (11M) |
 | **dev-1** | dev-1 | 14 | 16 | clubix_db (171M, copia), mini_db (89M), rojoplus_db (68M), parse_db (28M), mediflow_db (20M), axioma_erp (17M), hub_db (17M), elore_db (14M), + 8 más |

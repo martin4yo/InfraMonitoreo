@@ -13,7 +13,8 @@
 
 | App | Usuario | Puerto | Base | Rol PG | Conexión | PM2 | Repo |
 |---|---|---|---|---|---|---|---|
-| **mediflow** *(alvera)* | `mediflowapp` (1000) | **5300** | `mediflow_db` | `mediflowuser` | **:6432** pgbouncer | `mediflow-backend` ×2 cluster | `martin4yo/mediflow` (SSH) |
+| **alvera** *(ex mediflow)* | `alveraapp` (1000, grupo `www-data`) | **5300** | `alvera_db` | `alverauser` | **:6432** pgbouncer | `alvera-backend` ×2 cluster | `AxiomaCloud/Alvera` (SSH) |
+| **tally** *(ex rendiciones)* | `tallyapp` (997 axioma / 991 dev-1) | **5050** back · **8084** front | `tally_db` | `tallyuser` | :5432 directo | `tally-backend`, `tally-frontend` | `martin4yo/Rendiciones` (HTTPS) |
 | **hub** | `hubapp` (993) | **5200** back · **8089** front | `hub_db` | `hubuser` | :5432 directo | `hub-backend`, `hub-frontend` | `AxiomaCloud/ProHub` (SSH) |
 | **parse** | `parseapp` (117) | **5100** back · **8087** front | `parse_db` | `parseuser` | **:6432** pgbouncer | `parse-backend` | `martin4yo/parse` (SSH) |
 | **mini** | `miniapp` (1002) | **8095** back | `mini_db` | `miniuser` | **:6432** pgbouncer | `mini-backend` | `martin4yo/AxiomaWeb` (SSH) |
@@ -29,28 +30,46 @@
 
 ---
 
-## 🩺 mediflow (alvera) — PRIORIDAD 1
+## 🩺 alvera (ex mediflow) — PRIORIDAD 1
 
-> 📌 **La app se llama `alvera`; la infraestructura dice `mediflow`.** Ver
-> [Apéndice A.0 del DRP](./disaster-recovery-plan.md). Buscá `mediflow`, no `alvera`.
+> 📌 **El rename se COMPLETÓ (verificado 2026-09-03).** Lo que hasta el 08-12 seguía como `mediflow` en la
+> infraestructura hoy es `alvera` **en todo**: base, rol, usuario, directorio, unit, app PM2 y repo. La
+> nota vieja *"la infra dice mediflow, buscá mediflow"* quedó **obsoleta** — hoy es al revés. `mediflow_db`
+> y `/var/www/mediflow` **ya no existen** en axioma ni en dev-1. Ver el registro del cambio abajo.
 
 | | |
 |---|---|
-| **Path** | `/var/www/mediflow` (backend en `/backend`, frontend en `/frontend`) |
-| **Usuario** | `mediflowapp` — ⚠️ único con grupo suplementario `www-data` |
+| **Path** | `/var/www/alvera` (backend en `/backend`, frontend en `/frontend`) |
+| **Usuario** | `alveraapp` (uid 1000) — ⚠️ único con grupo suplementario `www-data` |
 | **Puerto** | `5300` |
-| **Base / rol** | `mediflow_db` / `mediflowuser` |
-| **Conexión** | `localhost:**6432**` (pgbouncer) + `?pgbouncer=true&connection_limit=5` |
+| **Base / rol** | `alvera_db` / `alverauser` — ⚠️ **`alvera_db` es owner `postgres`, NO `alverauser`** (desvío del estándar §9, ver hallazgo abajo) |
+| **Conexión** | `localhost:**6432**` (pgbouncer) + `?pgbouncer=true` |
 | **Dominios** | `alvera.axiomacloud.com`, `api.alvera.axiomacloud.com`, `alvera.com.ar`, `www.alvera.com.ar` |
 | **vhosts** | `alvera`, `alvera.com.ar` |
-| **PM2** | `mediflow-backend` · **cluster, 2 instancias** · `--max-old-space-size=192` · `max_memory_restart 500M` |
-| **RAM medida** | 2 × 146 MB + 60 MB daemon ≈ **350 MB** |
+| **PM2** | `alvera-backend` · **cluster, 2 instancias** |
+| **Repo** | `git@github.com:AxiomaCloud/Alvera.git` (SSH) — **repo nuevo**, ya no `martin4yo/mediflow` |
 | **Prisma** | ✅ sí — `npx prisma generate` tras `npm ci` |
 
-**🔴 Particularidad crítica — cifrado a nivel de aplicación.** Su `.env` tiene `ENCRYPTION_MASTER_KEY`
-(64 caracteres) y `SEARCH_HASH_SALT` (128). **Los datos de `mediflow_db` están cifrados en reposo por la
-app**: un restore de pgBackRest devuelve filas cifradas. Sin esas dos claves exactas, los datos de salud
-son **permanentemente ilegibles** y ningún backup lo resuelve.
+**🔴 Particularidad crítica — cifrado a nivel de aplicación.** Su `.env` tiene `ENCRYPTION_MASTER_KEY` y
+`SEARCH_HASH_SALT` (verificados presentes 2026-09-03). **Los datos de `alvera_db` están cifrados en reposo
+por la app**: un restore de pgBackRest devuelve filas cifradas. Sin esas dos claves exactas, los datos de
+salud son **permanentemente ilegibles** y ningún backup lo resuelve.
+
+> **📌 Registro del rename (2026-09-03).** Al relevar para documentar, se verificó en vivo que el rename
+> `mediflow → alvera` —que [G8](./gobierno/g8-clasificacion-datos.md) y el simulacro del 08-12 daban por
+> *detenido en la capa pública*— en realidad **se completó**: `mediflow_db → alvera_db` (42 MB),
+> `mediflowuser → alverauser`, `mediflowapp → alveraapp`, `pm2-mediflowapp → pm2-alveraapp`,
+> `/var/www/mediflow → /var/www/alvera`, y repo nuevo `AxiomaCloud/Alvera`. **Dos hallazgos operativos del
+> mismo relevamiento** (pendientes de decisión, no tocados):
+> 1. 🔴 **El `axio-db-agent` quedó roto para alvera**: su `.env` sigue apuntando a `mediflow_db` (borrada) y
+>    al schema `/var/www/mediflow/...` (inexistente). Log de arranque: `alvera ❌ sin conexión` (mini/elore/
+>    parse ✅). Roto desde el rename; nadie lo vio. Efecto lateral: **R14 queda neutralizado para alvera**
+>    mientras el agente no conecte — vuelve si se lo repunta a `alvera_db`.
+> 2. 🟡 **`alvera_db` es owner `postgres`, no `alverauser`** (el rename/migración se hizo como `postgres`):
+>    desvío del estándar §9, bomba latente de `permission denied` en la próxima migración de la app.
+>
+> **R06:** el rol débil era `mediflowuser`; ahora es `alverauser`. **Reverificar si la contraseña débil se
+> arrastró al rename** antes de darlo por rotado.
 
 > **La verificación de §9.3 del runbook no es opcional para esta app.** Es la única que distingue una
 > recuperación exitosa de una que *parece* exitosa. Riesgo **R15**.
@@ -463,6 +482,30 @@ Son copias de directorios más un vhost. **La parte rápida del DR**: sin base, 
 
 > ⚠️ `checkpoint_db` existe en el cluster, así que checkpoint **puede** no ser solo estático.
 > **(a confirmar)** antes del primer simulacro.
+
+---
+
+## 🧾 tally (ex rendiciones) — app nueva, alta ~2026-09-02
+
+> 📌 **`tally` es la reencarnación de `rendiciones`**, que la Fase 1 de estandarización dio de baja el
+> 2026-07-05 (con DROP de `rendiciones_db`). Volvió como app nueva, ya con el estándar aplicado: usuario
+> dedicado, base propia con owner correcto, monorepo. Corre en **axioma y dev-1**. Relevada 2026-09-03.
+
+| | |
+|---|---|
+| **Path** | `/var/www/tally` — **monorepo** (`/backend` + `/packages/web`) |
+| **Usuario** | `tallyapp` (uid **997** en axioma, **991** en dev-1 — uid dispar, ojo en restore cruzado) |
+| **Puerto** | `5050` backend · `8084` frontend |
+| **Base / rol** | `tally_db` / `tallyuser` — ✅ **owner correcto** (`tallyuser` es dueño de la base) |
+| **Conexión** | `:5432` directo (sin pgbouncer) |
+| **Dominios / vhost** | `tally.axiomacloud.com` / vhost `tally` |
+| **PM2** | `tally-backend` + `tally-frontend`, `pm2-tallyapp.service` enabled |
+| **Repo** | `github.com/martin4yo/Rendiciones` (HTTPS) |
+| **Prisma** | ✅ sí — `/var/www/tally/backend/prisma/schema.prisma` |
+
+> **Para el DR:** está en la stanza `AxiomaCloudProd` (se restaura con el cluster). No cifra en reposo
+> (a diferencia de alvera). El repo es HTTPS, así que el clone no necesita deploy key SSH.
+> **Hueco:** `infra-secrets` aún no tiene su `.env` (backend ni frontend) — versionarlo, ídem alvera.
 
 ---
 
