@@ -136,5 +136,23 @@ for name in "${WATCHDOG_SELF_SERVERS[@]}"; do
   ok "$S_NAME → auto-chequeo instalado y Netdata reiniciado"
 done
 
+# ---------------------------------------------------------------------------
+# 4) Repoblar el watchdog de flota si el host de monitoreo también lleva selfcheck
+#
+# El paso 3 le reinicia Netdata, y los charts de statsd NO sobreviven un restart:
+# vuelven recién cuando el colector emite. Sin esto, el host de monitoreo queda hasta
+# 15 min (el cron) sin los charts watchdog.fleet.* que acaba de poblar el paso 2 —
+# justo las alarmas de "host key cambiada" y "server ausente". Visto el 2026-09-05.
+# ---------------------------------------------------------------------------
+for name in "${WATCHDOG_SELF_SERVERS[@]}"; do
+  [[ "$name" == "$WATCHDOG_HOST" ]] || continue
+  rec="$(server_record_by_name "$WATCHDOG_HOST")" || break
+  parse_server "$rec"
+  SUDO="$(sudo_prefix "$S_USER")"
+  ssh_run "$S_USER" "$S_HOST" "$S_PORT" "${SUDO}/usr/bin/python3 /usr/local/bin/hostkey-watchdog.py || true"
+  ok "$WATCHDOG_HOST → charts de flota repoblados tras el restart del auto-chequeo"
+  break
+done
+
 log "Watchdog desplegado. Verificá los charts watchdog.* en Netdata Cloud."
 log "Tras una reinstalación LEGÍTIMA: hostkey-watchdog.py --reseed <server> en $WATCHDOG_HOST."

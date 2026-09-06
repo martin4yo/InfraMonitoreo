@@ -25,6 +25,12 @@
 #   watchdog.self.reboot_pending  -> 1 si hay un reboot pendiente (kernel/libc sin
 #                                    activar). NO entra en 'ok': es mantenimiento,
 #                                    no una regresión de hardening. Alarma propia.
+#   watchdog.self.colectores_backup -> 1 si los colectores de pgBackRest desplegados
+#                                    en ESTE server corrieron hace poco. Tampoco entra
+#                                    en 'ok': no es hardening, es monitoreo. Alarma propia.
+#   watchdog.self.drill_fresco    -> 1 si el restore drill corrió hace <40 días
+#   watchdog.self.drill_paso      -> 1 si el último restore drill dio PASS
+#                                    (ambas solo en el host ejecutor del drill)
 #
 # Cada métrica de control vale 0 cuando el control está caído o la herramienta no
 # está instalada: en un server donde el control se da por puesto, "ausente" es
@@ -82,6 +88,58 @@ if aclk=$(netdatacli aclk-state 2>/dev/null); then
   fi
 fi
 
+# Colectores de pgBackRest vivos. Existe porque los charts de statsd están en
+# `gaps when not collected = no`: netdata re-emite el último valor cada segundo, así
+# que un colector muerto deja sus métricas CONGELADAS en el último valor bueno y las
+# alarmas de pgBackRest se quedan en CLEAR para siempre — con el backup roto y sin
+# una sola señal. Confirmado en dev-1 el 2026-09-05: `last_collected_t` del chart
+# pgbackrest.backup_age daba 1 s de antigüedad con el cron corriendo cada 15 min.
+# Por eso mismo tampoco sirve la alarma estándar `$now - $last_collected_t`.
+#
+# Se mide desde ACÁ y no desde el propio colector: hace falta un segundo reloj. El
+# cron.d es la declaración de "este colector debe correr en este server" y el stamp
+# es la prueba de que corrió; si el cron.d no está, el colector no aplica a este
+# server y el control no opina. Un colector declarado y sin stamp vale 0: nunca
+# terminó una corrida.
+#
+# Residual conocido: si este selfcheck muere junto con el colector, su propia métrica
+# también se congela y nadie avisa. Hacen falta los dos crones muertos a la vez.
+colectores_backup=1
+colector_fresco() {  # $1=cron.d que lo declara  $2=stamp  $3=antigüedad máxima (seg)
+  [ -f "$1" ] || return 0                      # no desplegado acá: no aplica
+  [ -f "$2" ] || return 1                      # declarado pero nunca completó una corrida
+  local stamp_ts
+  stamp_ts=$(stat -c %Y "$2" 2>/dev/null) || return 1
+  [ $(( $(date +%s) - stamp_ts )) -le "$3" ]
+}
+# 2700 s = 3 ciclos del cron de 15 min; 1200 s = 4 ciclos del de 5 min. Holgados a
+# propósito: la alarma es para un colector MUERTO, no para uno que llegó tarde.
+colector_fresco /etc/cron.d/pgbackrest-netdata /var/lib/pgbackrest-netdata/repo.stamp 2700 \
+  || colectores_backup=0
+colector_fresco /etc/cron.d/pgbackrest-archive /var/lib/pgbackrest-archive/archive.stamp 1200 \
+  || colectores_backup=0
+
+# Restore drill (solo en el host ejecutor; el cron.d lo declara igual que arriba).
+# Dos señales separadas a propósito, misma lección que el verify: "hace 3 meses que no
+# se corre" y "corrió y falló" son problemas distintos y se arreglan distinto. El drill
+# quedó 48 días sin correr entre el 2026-07-19 y el 2026-09-05 justamente porque la
+# cadencia dependía de que alguien se acordara; esto la vuelve un control.
+drill_fresco=1
+drill_paso=1
+DRILL_STATE=/var/lib/pgbackrest-drill/last-drill.json
+if [ -f /etc/cron.d/restore-drill ]; then
+  if [ -f "$DRILL_STATE" ]; then
+    drill_ts=$(grep -o '"ts":[0-9]*' "$DRILL_STATE" 2>/dev/null | cut -d: -f2)
+    # 3456000 s = 40 días: cadencia mensual (~día 19) con margen para una ventana corrida.
+    if [ -z "$drill_ts" ] || [ $(( $(date +%s) - drill_ts )) -gt 3456000 ]; then
+      drill_fresco=0
+    fi
+    grep -q '"resultado":"PASS"' "$DRILL_STATE" 2>/dev/null || drill_paso=0
+  else
+    drill_fresco=0   # declarado y nunca corrido
+  fi
+fi
+
 # reboot pendiente: kernel/libc actualizados por unattended-upgrades pero sin activar.
 # NO es una regresión de hardening (no entra en 'ok'): es un recordatorio de que la
 # ventana de reinicio (C11 de G6) está pendiente. Alarma propia, de aviso.
@@ -101,8 +159,11 @@ send watchdog.self.sshd_noroot     "$sshd_noroot"
 send watchdog.self.netdata_claimed "$nd_ok"
 send watchdog.self.ok              "$all_ok"
 send watchdog.self.reboot_pending  "$reboot_pending"
+send watchdog.self.colectores_backup "$colectores_backup"
+send watchdog.self.drill_fresco    "$drill_fresco"
+send watchdog.self.drill_paso      "$drill_paso"
 
-printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s\n' \
-  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending"
+printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s colectores_backup=%s drill_fresco=%s drill_paso=%s\n' \
+  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending" "$colectores_backup" "$drill_fresco" "$drill_paso"
 
 [ "$all_ok" -eq 1 ] || exit 1
