@@ -10,8 +10,20 @@
 #
 # Alcance: solo las 3 stanzas de PROD (dev-1 no entra en el drill). Ver ALL_STANZAS.
 #
-# Requiere: pgbackrest 2.58, pg14+pg16 binaries, sudo local→postgres sin password,
-#           y SSH+sudo a dev-1 para leer las credenciales R2.
+# Requiere: pgbackrest 2.58+, binarios pg14+pg16, sudo local→postgres sin password, y
+#           las credenciales R2 (ver más abajo).
+#
+# DE DÓNDE SALEN LAS CREDENCIALES R2 (dos fuentes, en este orden):
+#   1. $R2_ENV_FILE (por defecto /etc/pgbackrest/drill-r2.env), un archivo local con
+#      las 6 variables R2_*. Es la vía preferida y la única que sirve en un servidor
+#      que NO tenga acceso SSH a dev-1 — por ejemplo axioma-drp.
+#   2. Si ese archivo no existe, se leen por SSH desde dev-1 (comportamiento original).
+#
+# Preferir (1) no es solo comodidad: (2) obliga a que el ejecutor del drill tenga
+# acceso SSH+sudo al repo host, que es el server con TODOS los backups y 16 copias de
+# bases productivas. Y sobre todo, (2) prueba un camino que en un desastre real puede
+# no existir: si dev-1 está caído, las credenciales tienen que venir de la custodia
+# (infra-secrets, SOPS), no del server que se perdió. La fuente (1) ensaya ese camino.
 #
 # Uso:
 #   ./70-restore-drill.sh                        # las 3 stanzas de prod
@@ -37,7 +49,11 @@ DRILL_TS="$(date '+%Y-%m-%d %H:%M:%S')"
 PG14_BIN="/usr/lib/postgresql/14/bin"
 PG16_BIN="/usr/lib/postgresql/16/bin"
 
-DEV1_SSH="axiomacloud@149.50.148.198"
+DEV1_SSH="${DEV1_SSH:-axiomacloud@149.50.148.198}"
+R2_ENV_FILE="${R2_ENV_FILE:-/etc/pgbackrest/drill-r2.env}"
+
+# Estado que lee el monitoreo (hardening-selfcheck.sh). Path fijo a propósito.
+DRILL_STATE="${DRILL_STATE:-/var/lib/pgbackrest-drill/last-drill.json}"
 
 # Puertos efímeros (evitan colisión con el 5432 local)
 PORT_AxiomaCloudProd=5442
@@ -76,9 +92,27 @@ sudo_pg() { sudo -u postgres -H "$@"; }
 # ── Paso 1: obtener credenciales R2 desde dev-1 ──────────────────────────────
 
 fetch_r2_credentials() {
-    info "Leyendo credenciales R2 desde dev-1..."
+    # Fuente 1: archivo local de credenciales (ver cabecera). Se lee con sudo para
+    # que pueda estar en 600 root.
+    if sudo test -f "$R2_ENV_FILE"; then
+        info "Leyendo credenciales R2 desde $R2_ENV_FILE..."
+        # shellcheck disable=SC1090
+        eval "$(sudo cat "$R2_ENV_FILE" | grep -E '^R2_[A-Z_]+=')"
+        [[ -z "${R2_BUCKET:-}" || -z "${R2_SECRET:-}" || -z "${R2_CIPHER:-}" ]] && {
+            echo "ERROR: $R2_ENV_FILE no define R2_BUCKET / R2_SECRET / R2_CIPHER" >&2; exit 1
+        }
+        ok "Credenciales R2 obtenidas de archivo local (bucket: $R2_BUCKET)"
+        return
+    fi
+
+    # Fuente 2: el repo host, por SSH.
+    info "Sin $R2_ENV_FILE; leyendo credenciales R2 desde $DEV1_SSH..."
     local conf
-    conf=$(ssh "$DEV1_SSH" "sudo cat /etc/pgbackrest/pgbackrest.conf")
+    conf=$(ssh "$DEV1_SSH" "sudo cat /etc/pgbackrest/pgbackrest.conf") || {
+        echo "ERROR: no hay acceso SSH a $DEV1_SSH ni archivo $R2_ENV_FILE." >&2
+        echo "       Creá el archivo con las 6 variables R2_* (ver la cabecera)." >&2
+        exit 1
+    }
 
     # Extrae el valor de una clave 'clave=valor' de la conf, tolerando espacios
     # alrededor del '=' y recortando espacios al inicio/fin del valor. Ancla la
@@ -228,6 +262,11 @@ HBAEOF
 
 # restore-drill overrides
 port = ${port}
+# Solo localhost: la instancia efímera monta datos productivos REALES (incluida
+# alvera_db, datos del art. 7 de la Ley 25.326) y el script se conecta por 127.0.0.1.
+# Hereda listen_addresses de la conf de producción, que puede ser '*'. No alcanza con
+# confiar en el firewall del host: el drill puede correrse en cualquier máquina.
+listen_addresses = 'localhost'
 hba_file = '${pgdata}/pg_hba.conf'
 ident_file = '${pgdata}/pg_ident.conf'
 PGEOF
@@ -461,6 +500,21 @@ main() {
     done
     echo "" | tee -a "$LOG_FILE"
     info "Historial actualizado: $HISTORY_CSV (recordá commitearlo)"
+
+    # Estado para el monitoreo. Va a un path FIJO (el CSV vive donde esté clonado el
+    # repo, que varía por host) y lo lee hardening-selfcheck.sh, que corre por otro
+    # cron y como root. Igual criterio que el verify: las dos señales van separadas —
+    # "hace cuánto que no se corre" no es lo mismo que "corrió y falló".
+    local drill_resultado="FAIL"
+    (( ${#FAILURES[@]} == 0 )) && drill_resultado="PASS"
+    if sudo mkdir -p "$(dirname "$DRILL_STATE")" 2>/dev/null; then
+        sudo tee "$DRILL_STATE" >/dev/null <<EOF
+{"ts":$(date +%s),"resultado":"${drill_resultado}","stanzas":${#stanzas[@]},"fallos":${#FAILURES[@]}}
+EOF
+        ok "Estado para el monitoreo en $DRILL_STATE"
+    else
+        warn "no se pudo escribir $DRILL_STATE — el monitoreo del drill no se va a actualizar"
+    fi
 
     if (( ${#FAILURES[@]} == 0 )); then
         echo -e "${GREEN}${BOLD}✓  DRILL EXITOSO — todas las stanzas OK${NC}\n" | tee -a "$LOG_FILE"
