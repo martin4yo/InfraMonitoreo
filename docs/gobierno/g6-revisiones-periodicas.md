@@ -19,18 +19,19 @@
 
 | # | Actividad | Frecuencia | Responsable | Origen | Evidencia (dónde se asienta) |
 |---|---|---|---|---|---|
-| **C1** | **Restore drill** de las 3 stanzas productivas | Mensual (~día 19) | RT (co-ejecución BT) | [DRP §7.2](../disaster-recovery-plan.md) | `drill-history.csv` (auto) + DRP §7.3 (curado) |
+| **C1** | **Restore drill** de las 3 stanzas productivas | Mensual (~día 19), **por cron en `axioma-drp`** desde 2026-09-05 | automático; RT revisa (co-ejecución BT) | [DRP §7.2](../disaster-recovery-plan.md) | `drill-history.csv` (auto) + DRP §7.3 (curado) + alarmas `watchdog_drill_*` |
 | **C2** | **Verificación del acceso SSH** a los 5 servers **desde cada estación** del RT y del BT | Mensual | RT | [DRP §5.3](../disaster-recovery-plan.md) | §3 de este documento |
 | **C3** | **Escaneo de vulnerabilidades** — `npm audit` de apps propias + `apt list --upgradable` | Mensual | RT | [G4 §3](./g4-gestion-vulnerabilidades.md) | §4 de este documento |
 | **C4** | **Auditoría de accesos** — usuarios del sistema, `authorized_keys`, roles de PostgreSQL, sudoers | Trimestral | RT | [G1 §3](./g1-politica-seguridad.md) | §5 de este documento |
 | **C5** | **Revisión de versiones vs. EOL/avisos** — PostgreSQL, Node, nginx, pgBackRest | Trimestral | RT | [G4 §3](./g4-gestion-vulnerabilidades.md) | §4 de este documento |
 | **C6** | **Revisión documental del marco de gobierno** — G1–G10 + registro de riesgos | Trimestral | RT (aprueba AN lo que corresponda) | [G1 §9](./g1-politica-seguridad.md), [G3 §5](./g3-registro-riesgos.md) | §6 de este documento |
 | **C7** | **Revisión del DRP** | Trimestral + tras incidente o cambio de infraestructura | RT | [DRP §7.1](../disaster-recovery-plan.md) | §6 de este documento |
-| **C8** | **Verificación de backups** — `pgbackrest check` en las 4 stanzas + frescura | Continua (alarmas Netdata) + confirmación en el drill mensual | RT | [G1 §6](./g1-politica-seguridad.md) | Netdata Cloud + C1 |
+| **C8** | **Verificación de backups** — `pgbackrest check` en las 4 stanzas + frescura + **señal de vida de los colectores** | Continua (alarmas Netdata) + confirmación en el drill mensual | RT | [G1 §6](./g1-politica-seguridad.md) | Netdata Cloud + C1 |
 | **C9** | **Ejercicio de incidente simulado** | Anual | RT + BT | [G5 §8](./g5-respuesta-incidentes.md) | §7 de este documento |
 | **C10** | **Revisión del inventario de secretos y rotación programada** | Semestral (inventario) · según [G7 §4](./g7-rotacion-secretos.md) (rotación) | RT | [G7](./g7-rotacion-secretos.md) | G7 §5 (registro de rotaciones) |
 | **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 · **alarma `watchdog_reboot_pendiente`** (selfcheck, avisa a las 24 h) desde 2026-09-03 |
 | **C12** | **Prueba de continuidad** — restaurar el kit desde los respaldos declarados, en equipo limpio | Semestral | **BT** (no el RT) | [G9 §6](./g9-continuidad-negocio.md) | §7 de este documento |
+| **C13** | **Verificación de integridad del repositorio** — `pgbackrest verify` (checksums de backups + WAL) en los 2 repos | **Semanal, una stanza por noche** (mar–sáb 05:00, automático) | automático en dev-1 | Hallazgo 2026-09-05 · [`pgbackrest-setup.md`](../pgbackrest-setup.md) | Netdata (`pgbackrest.verify_*`) + `/var/lib/pgbackrest-netdata/verify/` |
 
 ### 1.1 Anclaje del calendario
 
@@ -39,6 +40,7 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 | Ciclo | Anclaje | Actividades |
 |---|---|---|
 | **Mensual** | ~día **19** de cada mes | C1, C2, C3, **C11** (reinicio, en la misma ventana) |
+| **Semanal** | mar–sáb 05:00, por cron | **C13** (integridad del repo; no requiere intervención) |
 | **Trimestral** | **23 de ene / abr / jul / oct** | C4, C5, C6, C7 |
 | **Semestral** | **23 de ene / jul** | C10 (inventario de secretos) · **C12** (prueba de continuidad) |
 | **Anual** | a definir en el primer ejercicio | C9 |
@@ -57,11 +59,23 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 | Ciclo | Fecha | Ejecutor | Stanzas en PASS | Resultado del ciclo | Notas |
 |---|---|---|---|---|---|
 | 2026-07 | 2026-07-19 | martin4yo | 3/3 (AxiomaCloudProd, clubix, axiodemo) | ✅ **Cumplido** | Primer ciclo completo de las 3 stanzas. Los 2 FAIL previos fueron **falsos negativos** por 2 bugs del script, corregidos; PASS en la 3ª corrida. WAL lag 0–1 min. |
-| 2026-08 | _pendiente_ | — | — | ⬜ **Programado** (~2026-08-19) | Objetivo: 2º ciclo consecutivo → habilita pasar R11 a 🟢 y es la oportunidad de la **primera co-ejecución del BT** (cierra R08). |
+| 2026-08 | — | — | 0/3 | ❌ **OMITIDO** | **No se corrió.** Causa raíz: el ejecutor era `KEYSOFT-UBUNTU`, una máquina de escritorio que no está siempre encendida, así que la cadencia dependía de que alguien se acordara. **El conteo se reinicia.** |
+| 2026-09 | 2026-09-05 | axiomacloud (en `axioma-drp`) | 3/3 (AxiomaCloudProd, clubix, axiodemo) | ✅ **Cumplido** | Corrido **fuera de ciclo** para cerrar los 48 días sin drill. Primera corrida desde el ejecutor nuevo y con las credenciales R2 desde la custodia. Restore 153s / 47s / 8s, WAL lag 0–4 min, 650 tablas en AxiomaCloudProd. |
 
-> **Estado de la cadencia:** **1 ciclo ejecutado**. La cadencia mensual se considera **sostenida** (y el
-> riesgo **R11** de [G3](./g3-registro-riesgos.md) pasa a 🟢) cuando acumule **≥3 ciclos consecutivos**
-> cumplidos. Un ciclo omitido reinicia el conteo y se registra el motivo.
+> **Estado de la cadencia:** **1 ciclo ejecutado** (el conteo se reinició con la omisión de agosto). Se
+> considera **sostenida** —y **R11** de [G3](./g3-registro-riesgos.md) pasa a 🟢— con **≥3 ciclos
+> consecutivos** cumplidos.
+>
+> **Lo que cambió el 2026-09-05 para que la omisión no se repita.** El drill dejó de depender de la
+> memoria de una persona:
+> - **Ejecutor mudado a `axioma-drp`** — siempre prendido, en otro proveedor, y no es el repo host.
+> - **Cron mensual** (día 19, 03:00) instalado por `scripts/36-deploy-restore-drill.sh`.
+> - **Dos alarmas** que avisan por Telegram, alimentadas por el estado que deja el drill y publicadas
+>   por `hardening-selfcheck.sh` (otro cron, como root): `watchdog_drill_atrasado` (>40 días sin correr)
+>   y `watchdog_drill_fallido` (corrió y no pasó). Separadas a propósito: "no se corre" y "corrió y
+>   falló" son problemas distintos.
+>
+> Que un ciclo se omita ahora es **visible**, que es la diferencia entre una cadencia y un control.
 
 ## 3. Registro de verificación de acceso de emergencia (C2)
 

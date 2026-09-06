@@ -1,8 +1,8 @@
 # Procedimiento de Drill de Restauración — pgBackRest
 
-**Versión:** 1.1  
-**Fecha de referencia:** 2026-05-29  
-**Redactor:** Equipo infraestructura — ejecutar desde KEYSOFT-UBUNTU
+**Versión:** 1.2  
+**Fecha de referencia:** 2026-09-05  
+**Redactor:** Equipo infraestructura — **ejecutar desde `axioma-drp`** (era KEYSOFT-UBUNTU hasta 2026-09-05; ver §9)
 
 ---
 
@@ -14,7 +14,7 @@
 - Que el WAL archivado en R2 es continuo y puede reproducirse hasta los **últimos minutos antes del desastre** — no solo hasta el último backup incremental.
 - Que el proceso de restauración funciona de extremo a extremo: descarga desde R2, descifrado AES-256-CBC, descompresión lz4, WAL replay completo y promoción automática de PostgreSQL.
 - Que el tiempo de recuperación real (RTO) es conocido y documentado para cada stanza.
-- Que las credenciales de acceso a R2 y la clave de cifrado son correctas y accesibles desde KEYSOFT-UBUNTU.
+- Que las credenciales de acceso a R2 y la clave de cifrado son correctas y accesibles desde el ejecutor.
 
 ### Qué NO hace este drill
 
@@ -30,11 +30,11 @@ Un drill **sin** WAL replay solo confirma que el último backup incremental es r
 
 ## 2. Prerequisitos
 
-### En KEYSOFT-UBUNTU
+### En el ejecutor (`axioma-drp`)
 
 | Requisito | Verificación |
 |---|---|
-| `pgbackrest` instalado | `pgbackrest version` |
+| `pgbackrest` instalado | `pgbackrest version` (drp: 2.59.0) |
 | Binarios PG 14 | `ls /usr/lib/postgresql/14/bin/pg_ctl` |
 | Binarios PG 16 | `ls /usr/lib/postgresql/16/bin/pg_ctl` |
 | `sudo -u postgres` sin contraseña | `sudo -u postgres -H echo ok` |
@@ -43,13 +43,19 @@ Un drill **sin** WAL replay solo confirma que el último backup incremental es r
 
 ### Acceso SSH
 
-| Desde | Hacia | Usuario | Puerto |
-|---|---|---|---|
-| KEYSOFT-UBUNTU | dev-1 | axiomacloud | 22 |
+Con el ejecutor en `axioma-drp` **no hace falta ningún acceso SSH**: las credenciales R2 se leen del
+archivo local `/etc/pgbackrest/drill-r2.env` y el restore corre localmente.
 
-El script lee las credenciales R2 directamente desde `/etc/pgbackrest/pgbackrest.conf` en dev-1 vía SSH. No es necesario acceso SSH desde KEYSOFT-UBUNTU a los db-hosts para este drill — el restore corre localmente.
+| Desde | Hacia | Usuario | Puerto | ¿Necesario? |
+|---|---|---|---|---|
+| KEYSOFT-UBUNTU | dev-1 | axiomacloud | 22 | Solo en el modo viejo, sin `drill-r2.env` |
 
-### Espacio en disco estimado (en KEYSOFT-UBUNTU)
+> Leer las credenciales por SSH desde dev-1 sigue funcionando como *fallback*, pero es la vía peor:
+> obliga al ejecutor a tener acceso al repo host —el server con todos los backups y 16 copias de
+> bases productivas— y **ensaya un camino que en un desastre real puede no existir**. Si dev-1 se
+> perdió, las credenciales tienen que venir de la custodia, no de él.
+
+### Espacio en disco estimado (en el ejecutor)
 
 | Stanza | Backup comprimido en R2 | Espacio descomprimido estimado |
 |---|---|---|
@@ -61,7 +67,7 @@ El script lee las credenciales R2 directamente desde `/etc/pgbackrest/pgbackrest
 
 ## 3. Script automatizado
 
-El drill se ejecuta con `scripts/70-restore-drill.sh` desde KEYSOFT-UBUNTU. El script:
+El drill se ejecuta con `scripts/70-restore-drill.sh` desde el ejecutor (`axioma-drp`). El script:
 
 1. Lee las credenciales R2 desde dev-1 vía SSH.
 2. Genera un `pgbackrest.conf` local temporal con esas credenciales (como usuario `postgres`, permisos 600).
@@ -111,7 +117,7 @@ El restore se hace en dos fases:
 
 **DB host:** axioma — 66.97.45.210, PG 14, PGDATA producción: `/var/lib/postgresql/14/main`
 
-#### Paso 1 — Preparar directorio destino (en KEYSOFT-UBUNTU, como postgres)
+#### Paso 1 — Preparar directorio destino (en el ejecutor, como postgres)
 
 ```bash
 sudo -u postgres mkdir -p /var/lib/postgresql/restore-drill/AxiomaCloudProd/pgdata
@@ -283,9 +289,21 @@ Este drill es un **chequeo manual recurrente**, no automatizado. La decisión y 
 - **Cadencia acordada: mensual** (y siempre después de un cambio en la config de pgBackRest,
   cambio de versión de PostgreSQL, o migración de repo). Un drill viejo no vale: valida el
   estado del backup+WAL *al momento de correrlo*.
-- **No hay cron.** El ejecutor natural (`KEYSOFT-UBUNTU`) no está siempre encendido, así que un
-  cron generaría falsos "no corrió". El drill es rápido (~1 min/stanza) y auto-evaluante
-  (`exit 0/1` + resumen), por lo que correrlo a mano y registrarlo acá es suficiente.
+- **Ejecutor: `axioma-drp`** (desde 2026-09-05). Antes era `KEYSOFT-UBUNTU`, y ese fue justamente
+  el motivo de que la cadencia se rompiera: una máquina de escritorio que no está siempre
+  encendida no puede sostener un cron —generaría falsos "no corrió"—, así que el drill dependía
+  de que alguien se acordara. Resultado: **48 días sin correr** entre el 2026-07-19 y el
+  2026-09-05. `axioma-drp` está siempre prendido, en **otro proveedor** que producción, y no es
+  el repo host, así que cumple la regla de abajo y además **permite cron de verdad**.
+  - Se le instaló **PostgreSQL 16** el 2026-09-05 (`postgresql-16` de PGDG; solo binarios, sin
+    cluster nuevo ni puerto escuchando) porque solo tenía PG 14 y `axiodemo` es PG 16.
+  - Las credenciales R2 salen de **`/etc/pgbackrest/drill-r2.env`** (600 root), provisto desde
+    la custodia `infra-secrets/env/pgbackrest/repo2-r2.env` (SOPS). **No** por SSH a dev-1: drp
+    no tiene acceso al repo host, y no debe tenerlo. Ver la cabecera del script.
+- **La instancia efímera escucha solo en `localhost`.** El drill monta datos productivos reales
+  —incluida `alvera_db`, art. 7 de la Ley 25.326— y hereda `listen_addresses` de la conf de
+  producción, que puede ser `*`. El script lo fuerza a `localhost`; no se confía en el firewall
+  del host, porque el drill puede correrse en cualquier máquina.
 - **NO se corre en `dev-1`.** `dev-1` aloja el repositorio de backups. Un drill debe restaurar en
   un host **distinto** del repo: es lo único que prueba el escenario real de desastre (perder el
   host del repo) y evita colisiones con el PG/repo productivo. Correrlo en dev-1 invalidaría el
@@ -296,8 +314,8 @@ Este drill es un **chequeo manual recurrente**, no automatizado. La decisión y 
 ### Cómo correr el chequeo regular
 
 ```bash
-# En KEYSOFT-UBUNTU (o cualquier host != dev-1 con PG14/16 + pgbackrest 2.58 + sudo→postgres)
-cd ~/Desarrollos/InfraMonitoreo
+# En axioma-drp (o cualquier host != dev-1 con PG14/16 + pgbackrest 2.58+ + sudo→postgres)
+cd ~/InfraMonitoreo
 ./scripts/70-restore-drill.sh            # las 3 stanzas de prod
 echo "exit=$?"                            # 0 = todas PASS, 1 = alguna FAIL
 ```
