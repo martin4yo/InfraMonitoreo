@@ -36,6 +36,11 @@ for name in "${PGBACKREST_SERVERS[@]}"; do
     ${SUDO}mv /tmp/apc.$$ /usr/local/bin/archive-push-collect.py
     ${SUDO}chmod 755 /usr/local/bin/archive-push-collect.py
     ${SUDO}mkdir -p /etc/netdata/statsd.d /etc/netdata/health.d
+    # Directorio del stamp de vida del colector. Lo crea el deploy y no el propio
+    # colector porque /var/lib es de root: '${PG_USER}' no puede crearlo solo.
+    ${SUDO}mkdir -p /var/lib/pgbackrest-archive
+    ${SUDO}chown ${PG_USER}: /var/lib/pgbackrest-archive
+    ${SUDO}chmod 755 /var/lib/pgbackrest-archive
     ${SUDO}mv /tmp/apc-statsd.$$ /etc/netdata/statsd.d/pgbackrest-archive.conf
     ${SUDO}mv /tmp/apc-health.$$ /etc/netdata/health.d/pgbackrest-archive.conf
     echo '*/5 * * * * ${PG_USER} /usr/bin/python3 /usr/local/bin/archive-push-collect.py >/dev/null 2>&1' \

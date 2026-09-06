@@ -28,6 +28,13 @@ Métricas (una por db host — un cluster por server):
 Diseño de umbral: las alarmas (health.d) piden que la condición se sostenga ~10 min,
 para NO gritar por el blip normal de 90 s cuando dev-1 reinicia. Ese fue exactamente
 el falso "repo1 roto" del 2026-09-03.
+
+SEÑAL DE VIDA (STAMP_PATH). Al terminar la corrida se toca el stamp. Hace falta
+porque este chart también está en `gaps when not collected = no`: si el cron muere,
+statsd re-emite el último valor cada segundo y `failing=0` / `backlog=0` quedan
+congelados en verde para siempre. La frescura del stamp la mide
+hardening-selfcheck.sh, que corre por otro cron y como root. Ver el docstring de
+pgbackrest-collect.py, donde está la evidencia que lo confirmó.
 """
 import glob
 import os
@@ -37,11 +44,20 @@ import time
 
 STATSD = ("127.0.0.1", 8125)
 NO_OK_AGE = 99999999  # "infinito" cuando nunca hubo archivado exitoso
+STAMP_PATH = "/var/lib/pgbackrest-archive/archive.stamp"  # señal de vida; ver docstring
 
 
 def send(metric, value):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         s.sendto(f"{metric}:{value}|g".encode(), STATSD)
+
+
+def touch_stamp():
+    """Marca que esta corrida llegó hasta el final (señal de vida del colector)."""
+    os.makedirs(os.path.dirname(STAMP_PATH), exist_ok=True)
+    with open(STAMP_PATH, "a"):
+        pass
+    os.utime(STAMP_PATH, None)
 
 
 def psql(sql):
@@ -85,6 +101,9 @@ def main():
     send("pgbackrest.archive.failed_total", failed_total)
     send("pgbackrest.archive.failing", failing)
     send("pgbackrest.archive.since_last_ok", since_ok)
+
+    # Al final: el stamp significa "corrida completa", no "arrancó".
+    touch_stamp()
 
 
 if __name__ == "__main__":
