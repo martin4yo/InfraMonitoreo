@@ -156,4 +156,5 @@ Si un server cambia de IP o de proveedor, el backup empieza a fallar con `Access
       crear bucket/token o prefijo propio. `APP=checkpoint-web` requiere adaptar `ORIGEN` (no usa `backend/`).
 - [ ] **dev-1:** `chmod 700 /backup/alvera-adjuntos` (hoy `755`, con documentos de salud) — toca dev-1, pedir OK.
 - [ ] **Restore de adjuntos en el drill mensual** de drp (`scripts/70`): hoy prueba solo las stanzas.
-- [ ] Verificar que las alarmas `watchdog_adjuntos_*` pasen de `UNINITIALIZED` a `CLEAR` (ventanas de 15 min / 1 h).
+- [x] `watchdog_adjuntos_atrasado` → **CLEAR** a las 17:00:17 (2026-09-15), con el cron corriendo solo (16:45, 17:00).
+- [ ] `watchdog_adjuntos_integridad` → confirmar `CLEAR` (su ventana es de 1 h; en `UNINITIALIZED` a las 17:00).
