@@ -83,11 +83,13 @@ $EDITOR inventory.sh
 ./scripts/30-deploy-pgbackrest-monitoring.sh   # colector + alarmas en los servers con pgBackRest
 ```
 
-### pgBackRest con repo central en dev-1 (SSH)
+### pgBackRest dual-repo: central en dev-1 (SSH) + Cloudflare R2 (S3)
 
-Los 4 servers respaldan a un repositorio central en dev-1 (`/backup/pgbackrest`) por
-**SSH**, con pgBackRest 2.58 unificado (repo PGDG). Arquitectura, confianza SSH, el caso
-loopback de dev-1 y los gotchas (puerto 2222 de clubix, `AllowUsers`, fail2ban) están en
+Los 4 servers respaldan **en paralelo a dos repositorios**: **repo1** central en dev-1
+(`/backup/pgbackrest`) por **SSH**, y **repo2** en **Cloudflare R2** (bucket
+`axiomacloud-pgbackrest`, cifrado) como copia off-site que elimina el SPOF de dev-1.
+pgBackRest 2.58 unificado (repo PGDG). Arquitectura, confianza SSH, el caso loopback de
+dev-1 y los gotchas (puerto 2222 de clubix, `AllowUsers`, fail2ban) están en
 [docs/pgbackrest-setup.md](docs/pgbackrest-setup.md). Configs de referencia en
 `pgbackrest/repo-host/` y `pgbackrest/db-host/`.
 

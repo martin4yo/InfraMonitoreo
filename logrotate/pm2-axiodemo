@@ -1,0 +1,52 @@
+# InfraMonitoreo - rotacion de logs PM2 (axiodemo)
+# copytruncate -> no requiere reload de PM2. Desplegar en /etc/logrotate.d/pm2-apps (644 root:root).
+# NOTA: el 'su' es OBLIGATORIO: los dirs .pm2 son 775 y logrotate los rechaza sin el.
+
+/home/axiomacloud/.pm2/logs/*.log /home/axiomacloud/.pm2/pm2.log {
+    su axiomacloud axiomacloud
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 axiomacloud axiomacloud
+}
+
+/home/axioapp/.pm2/logs/*.log /home/axioapp/.pm2/pm2.log {
+    su axioapp axioapp
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 axioapp axioapp
+}
+
+/home/axio-tunnel/.pm2/logs/*.log /home/axio-tunnel/.pm2/pm2.log {
+    su axio-tunnel axio-tunnel
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 axio-tunnel axio-tunnel
+}
+
+/root/.pm2/logs/*.log /root/.pm2/pm2.log {
+    su root root
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 root root
+}
+

@@ -1,0 +1,16 @@
+# InfraMonitoreo - rotacion de logs PM2 (axioma-drp)
+# Server bare: hoy NO tiene apps ni PM2. Config preventiva para cuando se monte
+# una prueba de DRP. missingok tolera que las rutas no existan.
+
+/root/.pm2/logs/*.log /root/.pm2/pm2.log {
+    su root root
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+    create 640 root root
+}
+

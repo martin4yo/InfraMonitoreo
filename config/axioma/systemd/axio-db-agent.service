@@ -1,0 +1,28 @@
+[Unit]
+Description=AXIO DB Agent
+Documentation=https://github.com/martin4yo/cuthulu/tree/main/db-agent
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=axioapp
+Group=axioapp
+WorkingDirectory=/opt/axio-db-agent
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+# Opcional: archivo de variables si preferís separar credenciales
+# EnvironmentFile=/opt/axio-db-agent/.env
+
+# Hardening básico
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/axio-db-agent
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
