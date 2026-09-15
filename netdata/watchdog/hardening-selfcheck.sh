@@ -35,6 +35,9 @@
 #                                    acá terminaron OK hace <1 h
 #   watchdog.self.adjuntos_integro-> 1 si el último `restic check` semanal dio PASS y
 #                                    tiene <8 días (ambas solo donde hay cron.d)
+#   watchdog.self.drp_limpio      -> 1 si el host de simulacros no tiene bases de un
+#                                    simulacro con más de 48 h sin declarar (solo donde
+#                                    existe /etc/drp/host-simulacros)
 #
 # Cada métrica de control vale 0 cuando el control está caído o la herramienta no
 # está instalada: en un server donde el control se da por puesto, "ausente" es
@@ -173,6 +176,32 @@ for decl in /etc/cron.d/adjuntos-backup-*; do
   fi
 done
 
+# Simulacros olvidados en el host de simulacros (axioma-drp). Los simulacros de hub, parse
+# y alvera del 2026-08-12 dieron PASS y quedaron corriendo 34 días con datos de producción
+# sin que nada lo señalara. Se mide por la BASE (no por PM2) porque ahí están los datos
+# reales. Edad = mtime del PG_VERSION de la base (se escribe al crearla y no se toca más).
+# Excepciones con vencimiento en /etc/drp/simulacros-permitidos: "<base> <AAAA-MM-DD>".
+# Si la consulta falla (PG caído), vale 0: el control no puede afirmar que drp está limpio.
+drp_limpio=1
+drp_vencidos=0
+if [ -f /etc/drp/host-simulacros ]; then
+  if bases=$(runuser -u postgres -- psql -XtA -F'|' -c "select datname, extract(epoch from (pg_stat_file('base/'||oid||'/PG_VERSION')).modification)::bigint from pg_database where datname not in ('postgres','template0','template1')" 2>/dev/null); then
+    ahora=$(date +%s)
+    while IFS='|' read -r base creada; do
+      [ -n "$base" ] || continue
+      [ $(( ahora - creada )) -gt 172800 ] || continue          # 48 h
+      hasta=$(awk -v b="$base" '$1==b {print $2}' /etc/drp/simulacros-permitidos 2>/dev/null | tail -1)
+      if [ -n "$hasta" ] && [ "$(date -d "$hasta 23:59:59" +%s 2>/dev/null || echo 0)" -ge "$ahora" ]; then
+        continue                                                 # declarada y vigente
+      fi
+      drp_vencidos=$((drp_vencidos + 1))
+    done <<<"$bases"
+    [ "$drp_vencidos" -eq 0 ] || drp_limpio=0
+  else
+    drp_limpio=0
+  fi
+fi
+
 # reboot pendiente: kernel/libc actualizados por unattended-upgrades pero sin activar.
 # NO es una regresión de hardening (no entra en 'ok'): es un recordatorio de que la
 # ventana de reinicio (C11 de G6) está pendiente. Alarma propia, de aviso.
@@ -197,8 +226,9 @@ send watchdog.self.drill_fresco    "$drill_fresco"
 send watchdog.self.drill_paso      "$drill_paso"
 send watchdog.self.adjuntos_fresco "$adjuntos_fresco"
 send watchdog.self.adjuntos_integro "$adjuntos_integro"
+send watchdog.self.drp_limpio      "$drp_limpio"
 
-printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s colectores_backup=%s drill_fresco=%s drill_paso=%s adjuntos_fresco=%s adjuntos_integro=%s\n' \
-  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending" "$colectores_backup" "$drill_fresco" "$drill_paso" "$adjuntos_fresco" "$adjuntos_integro"
+printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s colectores_backup=%s drill_fresco=%s drill_paso=%s adjuntos_fresco=%s adjuntos_integro=%s drp_limpio=%s drp_vencidos=%s\n' \
+  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending" "$colectores_backup" "$drill_fresco" "$drill_paso" "$adjuntos_fresco" "$adjuntos_integro" "$drp_limpio" "$drp_vencidos"
 
 [ "$all_ok" -eq 1 ] || exit 1

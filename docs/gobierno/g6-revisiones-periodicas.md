@@ -31,8 +31,9 @@
 | **C10** | **Revisión del inventario de secretos y rotación programada** | Semestral (inventario) · según [G7 §4](./g7-rotacion-secretos.md) (rotación) | RT | [G7](./g7-rotacion-secretos.md) | G7 §5 (registro de rotaciones) |
 | **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 · **alarma `watchdog_reboot_pendiente`** (selfcheck, avisa a las 24 h) desde 2026-09-03 |
 | **C12** | **Prueba de continuidad** — restaurar el kit desde los respaldos declarados, en equipo limpio | Semestral | **BT** (no el RT) | [G9 §6](./g9-continuidad-negocio.md) | §7 de este documento |
-| **C14** | **Backup de adjuntos a R2** — restic cada 15 min + `forget/prune` y `check` del 5 % semanal | Continua (automático) · mantenimiento dom 04:30 | automático en axioma (alvera) | Hallazgo A-5 2026-09-15 · [`backup-adjuntos.md`](../backup-adjuntos.md) | Netdata (`watchdog_adjuntos_*`) + `/var/lib/adjuntos-backup/` + C1 (restore) |
 | **C13** | **Verificación de integridad del repositorio** — `pgbackrest verify` (checksums de backups + WAL) en los 2 repos | **Semanal, una stanza por noche** (mar–sáb 05:00, automático) | automático en dev-1 | Hallazgo 2026-09-05 · [`pgbackrest-setup.md`](../pgbackrest-setup.md) | Netdata (`pgbackrest.verify_*`) + `/var/lib/pgbackrest-netdata/verify/` |
+| **C14** | **Backup de adjuntos a R2** — restic cada 15 min + `forget/prune` y `check` del 5 % semanal | Continua (automático) · mantenimiento dom 04:30 | automático en axioma (alvera) | Hallazgo A-5 2026-09-15 · [`backup-adjuntos.md`](../backup-adjuntos.md) | Netdata (`watchdog_adjuntos_*`) + `/var/lib/adjuntos-backup/` + C1 (restore) |
+| **C15** | **Simulacro de recuperación de aplicaciones** — nivel 2 (2–3 apps por ventana, rotando) y nivel 3 anual (servidor entero, por el BT) | **Trimestral** (nivel 2) · **anual** (nivel 3) | RT (nivel 2) · **BT** (nivel 3) | [`drp-programa-simulacros.md`](../drp-programa-simulacros.md) | §2.1 de este documento + runbook de la app + informe al cliente (`docs/informes/`) + alarma `watchdog_drp_simulacro_olvidado` |
 
 ### 1.1 Anclaje del calendario
 
@@ -42,7 +43,7 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 |---|---|---|
 | **Mensual** | ~día **19** de cada mes | C1, C2, C3, **C11** (reinicio, en la misma ventana) |
 | **Semanal** | mar–sáb 05:00, por cron | **C13** (integridad del repo; no requiere intervención) |
-| **Trimestral** | **23 de ene / abr / jul / oct** | C4, C5, C6, C7 |
+| **Trimestral** | **23 de ene / abr / jul / oct** | C4, C5, C6, C7, **C15** (simulacro de apps según la rotación) |
 | **Semestral** | **23 de ene / jul** | C10 (inventario de secretos) · **C12** (prueba de continuidad) |
 | **Anual** | a definir en el primer ejercicio | C9 |
 
@@ -77,6 +78,25 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 >   falló" son problemas distintos.
 >
 > Que un ciclo se omita ahora es **visible**, que es la diferencia entre una cadencia y un control.
+
+### 2.1 Registro de simulacros de aplicación (C15)
+
+> **Qué se prueba, cuándo y en qué orden:** [`drp-programa-simulacros.md`](../drp-programa-simulacros.md)
+> (matriz de cobertura §3.2 y calendario §3.3). Una fila por app probada; una ventana no ejecutada se asienta
+> como **omitida**.
+
+| Ventana | Fecha | Nivel | App | Origen → destino | RPO / RTO medidos | Login real | Teardown | Resultado | Evidencia |
+|---|---|---|---|---|---|---|---|---|---|
+| (previo a C15) | 2026-08-12 | 2 | hub | axioma → drp | — | ✅ | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (previo a C15) | 2026-08-12 | 2 | parse | axioma → drp | — | — | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (previo a C15) | 2026-08-12 | 2 | alvera (mediflow) | axioma → drp | — | ✅ | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (fuera de ciclo) | **2026-09-15** | 2 | **checkpoint** | dev-1 → drp | ≈ 2 min / ≈ 20 min | ✅ | ✅ mismo día | ✅ PASS | [runbook](../drp-checkpoint-en-drp.md) · [informe](../informes/2026-09-15-checkpoint.md) |
+| (fuera de ciclo) | **2026-09-15** | 2 | **alvera** | axioma → drp | ≈ 0 / 13 min | ✅ + ficha | ✅ mismo día | ✅ PASS | [runbook](../drp-alvera-en-drp.md) · [informe](../informes/2026-09-15-alvera.md) |
+| **2026-10** | _pendiente_ | 2 | clubix · mini · tally | — | — | — | — | ⬜ | — |
+
+> **Lección de agosto, hoy control:** los tres simulacros del 2026-08-12 dieron PASS y **quedaron corriendo con
+> datos de producción hasta el 2026-09-15**. Un simulacro sin teardown convierte una prueba de continuidad en
+> una copia no controlada de datos personales. Desde el 2026-09-15 la vida máxima en drp es **48 h**, con alarma.
 
 ## 3. Registro de verificación de acceso de emergencia (C2)
 
