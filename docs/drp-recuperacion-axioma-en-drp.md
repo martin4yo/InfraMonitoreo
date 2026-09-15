@@ -384,9 +384,14 @@ Por cada `<app>`, según su ficha:
 > siguen apuntando a la IP de axioma. Ningún backup resuelve esto. Es **K8** del
 > [kit de continuidad](./gobierno/g9-continuidad-negocio.md).
 
-### 8.1 🔴 BLOQUEANTE VERIFICADO — el proveedor filtra 80/443 hacia drp
+### 8.1 ~~🔴 BLOQUEANTE VERIFICADO — el proveedor filtra 80/443 hacia drp~~ — ✅ RESUELTO
 
-**Mover el DNS no alcanza. Hoy el servicio quedaría caído igual.** Verificado el 2026-08-12:
+> ✅ **R21 cerrado el 2026-08-12** (baehost habilitó 80/443 — ver [G3](./gobierno/g3-registro-riesgos.md)).
+> **Reconfirmado el 2026-09-15** en el [simulacro de Checkpoint](./drp-checkpoint-en-drp.md): Let's Encrypt
+> validó HTTP-01 contra drp desde internet y la app respondió por HTTPS sin túnel. Lo que sigue queda
+> como registro histórico; el paso **8.0** se mantiene como verificación previa obligatoria.
+
+**Mover el DNS no alcanzaba: el servicio hubiera quedado caído igual.** Verificado el 2026-08-12:
 
 | Prueba | Resultado |
 |---|---|

@@ -13,3 +13,4 @@ fecha,ejecutor,stanza,backup,repo,restore,wal_lag,resultado
 2026-09-05 22:07:39,axiomacloud,AxiomaCloudProd,20260830-030019F_20260905-190017I,R2,153s,0m,PASS
 2026-09-05 22:07:39,axiomacloud,clubix,20260830-031515F_20260905-151514I,R2,47s,4m,PASS
 2026-09-05 22:07:39,axiomacloud,axiodemo,20260830-033015F_20260905-153017I,R2,8s,0m,PASS
+2026-09-15 08:56:36,martin,dev-1:checkpoint_db (DRP-app checkpoint → axioma-drp),20260913-034513F_20260915-074512I,R2,28s,2m,PASS

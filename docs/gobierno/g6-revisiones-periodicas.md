@@ -193,7 +193,7 @@ caso de **dev-1** por ser el repo host de todos los backups. A resolver en la pr
 | SSH sin root ni password en los 5 | ✅ | H05 |
 | Usuarios de provisioning/terceros sin llaves (`linuxadmin` en axioma-drp) | ⚠ **re-verificar cada vez** — la reinstalación del SO de axioma-drp (2026-08-08) revirtió la mitigación. Re-cerrado 2026-08-11. ⚠️ **Corregido 2026-09-15:** la llave que se purgó como "ajena del proveedor" (`mfourgeaux@KEYSOFT-I7`) **era la del propio RT**; se reinstaló en `axiomacloud`. Al verificar, **contrastar cada fingerprint contra las estaciones del RT antes de borrar** — y no confundir "sobrevivió a la reinstalación" con "viene en la imagen" | H10 |
 | `pg_hba` a loopback + `scram-sha-256`, 0 hashes `md5` | ✅ | H01 (cerrado 2026-07-22) |
-| Apps bajo usuario dedicado | ⚠ **parcial** — desvíos abiertos: `mediflow-backend` (dev-1) corre como **root**; `checkpoint-web` como `axiomacloud`; `axio-ml` como `axiomacloud` (R04) | H04 / H11 |
+| Apps bajo usuario dedicado | ⚠ **parcial** — desvíos abiertos: ~~`mediflow-backend` (dev-1) corre como **root**~~ (✅ hoy `alvera-backend` bajo `alveraapp`) · ~~`checkpoint-web` como `axiomacloud`~~ (✅ hoy `checkpointapp`) — ambos verificados 2026-09-15; `axio-ml` como `axiomacloud` (R04) | H04 / H11 |
 | **Detección de reinstalación de un server** (host key SSH vs. línea de base) | ✅ **automatizado 2026-08-11** — watchdog en dev-1, cron cada 15 min, alarma crítica validada end-to-end (dispara en 20s). Cubre los 5 servers. **Deja de ser una verificación manual de cadencia**: pasa a control continuo, como C8 | [hardening §12](../hardening.md) |
 
 | Fecha | Ejecutor | Alcance | Hallazgos | Resultado |

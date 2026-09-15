@@ -483,6 +483,10 @@ Son copias de directorios más un vhost. **La parte rápida del DR**: sin base, 
 
 > ⚠️ `checkpoint_db` existe en el cluster, así que checkpoint **puede** no ser solo estático.
 > **(a confirmar)** antes del primer simulacro.
+>
+> 📌 **No confundir con la aplicación Checkpoint** (RRHH / presencia, Next.js), que corre en **dev-1**
+> como `checkpointdemo.axiomacloud.com` con su propia `checkpoint_db` en la stanza `dev-1`. Tiene runbook
+> propio, **ejecutado con PASS el 2026-09-15**: [drp-checkpoint-en-drp.md](./drp-checkpoint-en-drp.md).
 
 ---
 
