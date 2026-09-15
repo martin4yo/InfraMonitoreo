@@ -31,10 +31,11 @@ Aplica al cierre de:
 No aplica a cambios que no cierran un hallazgo (mejoras, refactors, despliegues rutinarios), aunque las
 reglas de §2 son buena práctica igual.
 
-## 2. Las ocho reglas de verificación
+## 2. Las nueve reglas de verificación
 
 Cada una nació de un error real. Se listan con su origen para que no se relajen por comodidad.
 **R8 se agregó el 2026-08-12**, y nació de un error *nuestro*: una prueba que creíamos diagnóstica y no lo era.
+**R9 se agregó el 2026-09-15**, y nació de otro error nuestro: una remediación que quitó un acceso legítimo.
 
 ### R1 — Verificar contra el **próximo arranque**, no contra el proceso vivo
 
@@ -129,6 +130,32 @@ engañosos en **ambas direcciones**.
 > `000`** — revelando que nunca había medido lo que se creía. El hallazgo era correcto, pero por una de
 > las tres pruebas, no por las tres.*
 
+### R9 — Antes de **quitar** un acceso, identificar a su dueño
+
+Una remediación que **elimina** algo (una llave, una cuenta, una regla de firewall, un `GRANT`) puede
+romper un acceso legítimo. El riesgo es asimétrico y silencioso: quitar de más **no falla en el momento**
+—falla la próxima vez que alguien necesita entrar, que puede ser durante un incidente.
+
+- **DEBE** identificarse el dueño de lo que se quita **antes** de quitarlo, contra el inventario de
+  estaciones y personas propias — no inferirlo del contexto ni del nombre.
+- Para llaves SSH: comparar **fingerprints**, `ssh-keygen -lf ~/.ssh/id_*.pub` en cada estación del RT y
+  del BT. El **comentario** de la llave (`usuario@host`) es un indicio, **no** una prueba de origen.
+- ⚠️ **«Sobrevivió a una reinstalación» NO prueba que venga de la imagen del proveedor.** Prueba
+  únicamente que alguien la puso *después* de la reinstalación — y ese alguien puede ser uno mismo.
+- **Control negativo asociado (R3):** tras quitar el acceso, verificar que las vías legítimas restantes
+  siguen funcionando **desde cada estación**, no solo desde aquella donde se ejecutó el cambio (R8 aplicada
+  al acceso administrativo: se prueba desde donde está el usuario).
+- Si no se logra identificar al dueño, la acción por defecto es **conservar y registrar**, no borrar.
+
+> *Origen: H10 (2026-08-11, corregido el 2026-09-15). Se purgó de axioma-drp la llave
+> `mfourgeaux@KEYSOFT-I7` por «ajena, venida en la imagen de provisioning del proveedor», con el argumento
+> de que había sobrevivido a la reinstalación del 08-08. **Era la llave del propio RT.** El backup que dejó
+> la propia purga contenía las **dos** estaciones del RT —`keysoft-i5` y `KEYSOFT-I7`—, algo que la imagen
+> del proveedor no explica: las había instalado el RT dos días antes. Nunca hubo llaves de terceros. Costo:
+> **35 días** con el servidor de DRP accesible desde una sola estación, sin que ningún control lo detectara
+> —incluida una ejecución de C2 que dio verde el mismo día de la purga, porque se corrió desde la otra
+> estación.*
+
 ## 3. Checklist de cierre
 
 Un hallazgo **NO DEBE** marcarse cerrado sin completar esta checklist. Se adjunta al registro del hallazgo.
@@ -149,6 +176,9 @@ Ejecutor          : ____________________          Revisor (si aplica): _________
 [ ] R7  Estado efectivo del servicio confirmado (no solo el archivo)
 [ ] R8  Si el servicio es público: verificado DESDE FUERA de la red del proveedor
         (nunca desde el servidor a su propia IP pública — hairpinning)
+[ ] R9  Si la remediación QUITA un acceso: dueño identificado por fingerprint/inventario
+        antes de quitarlo, y acceso restante probado DESDE CADA estación del RT/BT
+        Qué se quitó y de quién era: ________________________
 [ ] Rollback disponible y probado, o justificación de por qué no aplica
 [ ] Residuos barridos (backups temporales, .bak, logs con el valor viejo) — 0 ocurrencias
 [ ] Documentación actualizada: dossier + documento técnico + registro de riesgos

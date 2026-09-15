@@ -21,8 +21,12 @@
 
 > **Nota.** El RT y el BT tienen acceso administrativo a los 5 servidores (acceso del BT ya provisto).
 > La AN no requiere acceso técnico a los servers (rol de aprobación, no de operación). No existe hoy
-> ninguna otra persona con acceso administrativo. Los usuarios de provisioning/terceros (`linuxadmin`
-> en axioma-drp) están bloqueados (`passwd -l`) y solo se usan para emergencia por clave (H10).
+> ninguna otra persona con acceso administrativo. El usuario de provisioning `linuxadmin` (axioma-drp)
+> queda como **acceso de emergencia del propio RT**: sin password por SSH (`PasswordAuthentication no`) y
+> con una única llave autorizada, `axiomacloud@keysoft-i5`, que es del RT (H10). **Corregido 2026-09-15**,
+> tras verificación en vivo: (a) `linuxadmin` **no** está bloqueado con `passwd -l` desde el rearmado del
+> 2026-08-11 —desvío deliberado, para no dejar la cuenta de emergencia sin poder autenticar `sudo`—, y
+> (b) **no hay ni hubo llaves de terceros** en ese `authorized_keys`. Detalle en `hardening.md` §axioma-drp.
 
 ## 2. Definición RACI
 

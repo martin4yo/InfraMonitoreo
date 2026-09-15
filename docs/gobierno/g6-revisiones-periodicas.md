@@ -20,7 +20,7 @@
 | # | Actividad | Frecuencia | Responsable | Origen | Evidencia (dónde se asienta) |
 |---|---|---|---|---|---|
 | **C1** | **Restore drill** de las 3 stanzas productivas | Mensual (~día 19) | RT (co-ejecución BT) | [DRP §7.2](../disaster-recovery-plan.md) | `drill-history.csv` (auto) + DRP §7.3 (curado) |
-| **C2** | **Verificación del acceso SSH de emergencia** a los 5 servers | Mensual | RT | [DRP §5.3](../disaster-recovery-plan.md) | §3 de este documento |
+| **C2** | **Verificación del acceso SSH** a los 5 servers **desde cada estación** del RT y del BT | Mensual | RT | [DRP §5.3](../disaster-recovery-plan.md) | §3 de este documento |
 | **C3** | **Escaneo de vulnerabilidades** — `npm audit` de apps propias + `apt list --upgradable` | Mensual | RT | [G4 §3](./g4-gestion-vulnerabilidades.md) | §4 de este documento |
 | **C4** | **Auditoría de accesos** — usuarios del sistema, `authorized_keys`, roles de PostgreSQL, sudoers | Trimestral | RT | [G1 §3](./g1-politica-seguridad.md) | §5 de este documento |
 | **C5** | **Revisión de versiones vs. EOL/avisos** — PostgreSQL, Node, nginx, pgBackRest | Trimestral | RT | [G4 §3](./g4-gestion-vulnerabilidades.md) | §4 de este documento |
@@ -81,14 +81,21 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 
 1. Desde el equipo de restauración, `ssh` a cada uno de los 5 servidores con la clave de emergencia.
 2. Confirmar que la sesión abre **sin password** y que `sudo -n true` responde donde corresponde.
-3. Verificar que el acceso del **BT** también funciona (no solo el del RT) — es lo que sostiene el bus factor 2.
-4. Asentar el resultado en la tabla.
+3. ⚠️ **Repetir desde CADA estación del RT** (hoy `keysoft-i5` y `KEYSOFT-I7`), no solo desde la que se tenga
+   a mano. Una matriz **estación × servidor**: un verde obtenido desde una sola estación **no dice nada** de
+   las demás. *(Agregado el 2026-09-15 — ver el hallazgo al pie.)*
+4. Verificar que el acceso del **BT** también funciona (no solo el del RT) — es lo que sostiene el bus factor 2.
+5. Cotejar el `authorized_keys` de cada server contra el inventario de estaciones: **toda** llave presente
+   debe tener dueño identificado, y **toda** estación vigente debe estar presente. Las dos direcciones
+   (R9 de [G10](./g10-verificacion-remediaciones.md)).
+6. Asentar el resultado en la tabla, **indicando desde qué estación se verificó**.
 
 | Fecha | Ejecutor | axioma | clubix | axiodemo | dev-1 | axioma-drp | Acceso BT | Resultado |
 |---|---|---|---|---|---|---|---|---|
 | **2026-08-09** | martin4yo | ✅ OK | ✅ OK (:2222) | ✅ OK | ✅ OK | ⚠️ No alcanzado | ⬜ No verificado | 🟡 **4 de 5.** Primera ejecución registrada de C2 |
 | **2026-08-11** | martin4yo | ✅ OK | ✅ OK (:2222) | ✅ OK | ✅ OK | ✅ **OK** — `sudo` NOPASSWD | ⬜ No verificado | ✅ **5 de 5.** Ver corrección abajo |
-| _pendiente_ | — | — | — | — | — | — | — | ⬜ Próxima ~2026-09-09 |
+| **2026-09-15** (i7) | martin4yo | ⬜ | ⬜ | ⬜ | ⬜ | ✅ **OK** tras remediar | ⬜ No verificado | 🔴 **Hallazgo: acceso a axioma-drp ROTO desde la i7 durante 35 días** (08-11 → 09-15). Ver nota abajo |
+| _pendiente_ | — | — | — | — | — | — | — | ⬜ Próxima ~2026-10-09 — **ejecutar la matriz completa estación × servidor** |
 
 
 > ⚠️ **Corrección del registro del 2026-08-09 (aplicando R5/R7 de [G10](./g10-verificacion-remediaciones.md)).**
@@ -100,6 +107,22 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 > usuario `axiomacloud` se creó ese día. El acceso de emergencia es `linuxadmin` (sudo con password).
 > Un servidor reinstalado 24 h antes del relevamiento explica el hueco, y es justo el tipo de cambio que
 > esta cadencia existe para detectar.
+
+> 🔴 **Hallazgo del 2026-09-15 — esta cadencia dio verde sobre un acceso roto.** El registro del
+> **2026-08-11** asienta axioma-drp en ✅, y era cierto… **desde la estación `keysoft-i5`**. Ese mismo día,
+> y como parte del rearmado, se purgó de drp la llave de la otra estación del RT (`KEYSOFT-I7`) creyéndola
+> ajena — ver la corrección de H10 en el [dossier](../dossier-auditoria-seguridad.md) y en
+> [`hardening.md`](../hardening.md). Resultado: **C2 verificó y aprobó el acceso el mismo día en que el
+> acceso desde la otra estación se rompía**, y el problema sobrevivió 35 días, hasta que el RT intentó
+> entrar desde la i7. La ejecución de septiembre (~09-09) tampoco se había corrido.
+>
+> **Por qué el control no lo vio:** C2 medía *«¿puedo entrar?»* desde **una** estación, no *«¿se puede
+> entrar desde todas las vías que el DRP da por disponibles?»*. Con una sola estación verificando, el
+> bus factor real de drp era **1** mientras el documento decía 2.
+>
+> **Corrección aplicada** (pasos 3, 5 y 6 del procedimiento): la verificación pasa a ser una **matriz
+> estación × servidor**, se coteja el `authorized_keys` contra el inventario **en las dos direcciones**, y
+> el registro debe decir **desde dónde** se verificó. Un verde sin estación indicada ya no es válido.
 
 > **Nota de alcance.** El DRP §5.2 lista 4 servidores (es previo a la incorporación de `axioma-drp`).
 > Esta verificación cubre los **5**, incluyendo el host de DRP. Corregir el DRP §5.2 en la próxima
@@ -152,7 +175,7 @@ caso de **dev-1** por ser el repo host de todos los backups. A resolver en la pr
 | Control | Estado verificado | Fuente |
 |---|---|---|
 | SSH sin root ni password en los 5 | ✅ | H05 |
-| Usuarios de provisioning/terceros bloqueados (`linuxadmin` en axioma-drp) | ⚠ **re-verificar cada vez** — la reinstalación del SO de axioma-drp (2026-08-08) revirtió la mitigación y **reintrodujo la llave ajena desde la imagen del proveedor**. Re-cerrado 2026-08-11 | H10 |
+| Usuarios de provisioning/terceros sin llaves (`linuxadmin` en axioma-drp) | ⚠ **re-verificar cada vez** — la reinstalación del SO de axioma-drp (2026-08-08) revirtió la mitigación. Re-cerrado 2026-08-11. ⚠️ **Corregido 2026-09-15:** la llave que se purgó como "ajena del proveedor" (`mfourgeaux@KEYSOFT-I7`) **era la del propio RT**; se reinstaló en `axiomacloud`. Al verificar, **contrastar cada fingerprint contra las estaciones del RT antes de borrar** — y no confundir "sobrevivió a la reinstalación" con "viene en la imagen" | H10 |
 | `pg_hba` a loopback + `scram-sha-256`, 0 hashes `md5` | ✅ | H01 (cerrado 2026-07-22) |
 | Apps bajo usuario dedicado | ⚠ **parcial** — desvíos abiertos: `mediflow-backend` (dev-1) corre como **root**; `checkpoint-web` como `axiomacloud`; `axio-ml` como `axiomacloud` (R04) | H04 / H11 |
 | **Detección de reinstalación de un server** (host key SSH vs. línea de base) | ✅ **automatizado 2026-08-11** — watchdog en dev-1, cron cada 15 min, alarma crítica validada end-to-end (dispara en 20s). Cubre los 5 servers. **Deja de ser una verificación manual de cadencia**: pasa a control continuo, como C8 | [hardening §12](../hardening.md) |

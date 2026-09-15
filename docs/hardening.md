@@ -291,10 +291,29 @@ código). Ver "Pendientes dev-1" abajo.
 
 Rearmado completo el **2026-08-11**, todo verificado en vivo:
 
-- ✅ **Llave ajena eliminada**: `mfourgeaux@KEYSOFT-I7` (`SHA256:K/yJkjhyAQ/hO2WS9ybqZc6/eR0j6VFGRxL6WJoC1ko`)
-  **sobrevivió a la reinstalación** en el `authorized_keys` de `linuxadmin` — es decir, venía en la imagen de
-  provisioning del proveedor, no era un resto local. Purgada de `linuxadmin` y de `axiomacloud`
-  (backups `.bak-<ts>`). Hoy ambos tienen **solo** `axiomacloud@keysoft-i5`.
+- ⚠️ **Llave `mfourgeaux@KEYSOFT-I7` purgada por error — DIAGNÓSTICO CORREGIDO EL 2026-09-15.** El 08-11 se
+  eliminó `mfourgeaux@KEYSOFT-I7` (`SHA256:K/yJkjhyAQ/hO2WS9ybqZc6/eR0j6VFGRxL6WJoC1ko`) de `linuxadmin` y de
+  `axiomacloud` por considerarla **ajena, venida en la imagen de provisioning del proveedor**, razonando que
+  había *sobrevivido a la reinstalación* del 08-08. **Era la llave del propio RT** — la de la estación
+  `KEYSOFT-I7` — y la purga dejó a drp accesible desde **una sola estación**, sin que nadie lo notara durante
+  **35 días**, hasta el 2026-09-15.
+
+  **Evidencia que lo prueba** (leída en vivo el 2026-09-15 del backup que dejó la propia purga,
+  `/home/linuxadmin/.ssh/authorized_keys.bak-20260811-211616`): ese archivo contenía **dos** llaves,
+  `axiomacloud@keysoft-i5` **y** `mfourgeaux@KEYSOFT-I7` — **las dos estaciones del RT, ninguna ajena**. Una
+  imagen de provisioning del proveedor no explica la presencia de la i5. La explicación consistente es que
+  ambas las instaló el RT al restaurar el acceso *«desde un equipo nuevo»* (registro del 2026-08-09 en el
+  dossier), dos días antes del rearmado. Confirmación complementaria: la i7 autentica hoy contra los otros
+  4 servers.
+
+  **Estado 2026-09-15:** llave **reinstalada** en `axiomacloud` desde la i5 (append idempotente, sin tocar la
+  existente); `axiomacloud` tiene `axiomacloud@keysoft-i5` + `mfourgeaux@KEYSOFT-I7`, `linuxadmin` conserva
+  `axiomacloud@keysoft-i5` como emergencia. **Las 3 son del RT: no hay llaves de terceros en drp.**
+
+  **Lección:** antes de purgar una llave por "ajena", contrastar el fingerprint contra las estaciones propias
+  (`ssh-keygen -lf ~/.ssh/id_*.pub` en cada una). *"Sobrevivió a una reinstalación"* **no** prueba origen en la
+  imagen del proveedor — prueba solamente que alguien la puso después de la reinstalación, y ese alguien
+  puede ser uno mismo. Candidata a regla de G10, en la línea de R8.
 - ✅ **Usuario `axiomacloud` creado** (uid 1002, grupo sudo, `NOPASSWD` en `/etc/sudoers.d/90-axiomacloud`),
   alineado con los otros 4 servers y con lo que declara `inventory.sh`. Los scripts del repo ya corren acá
   sin editar el inventario. `linuxadmin` queda como **acceso de emergencia** (password activa, sudo con
