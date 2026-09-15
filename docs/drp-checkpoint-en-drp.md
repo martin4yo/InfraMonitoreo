@@ -8,8 +8,8 @@
 > copiar. Cada paso dice **dónde** se corre (💻 equipo del operador · 🛟 axioma-drp) y con qué se
 > verifica. La §12 registra la ejecución real del 2026-09-15.
 >
-> **Estado:** ✅ **EJECUTADO 2026-09-15 — PASS.** Checkpoint quedó sirviendo en
-> `https://checkpointdrp.axiomacloud.com` desde R2 + GitHub + infra-secrets, sin tocar dev-1.
+> **Estado:** ✅ **EJECUTADO 2026-09-15 — PASS.** Checkpoint sirvió en `https://checkpointdrp.axiomacloud.com`
+> desde R2 + GitHub + infra-secrets, sin tocar dev-1. Login real verificado; **teardown hecho el mismo día**.
 >
 > | Métrica | Valor medido |
 > |---|---|
@@ -426,8 +426,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST $URL/api/auth/login \
         "select \"faceEmbeddings\" from biometric_data where coalesce(\"faceEmbeddings\",'')<>''" \
         | sudo -u checkpointapp node /tmp/bio-check.js; rm /tmp/bio-check.js     # → fallidos=0
       ```
-- [ ] **Login real** en la interfaz con un usuario existente — **pendiente, lo hace una persona** (el
-      simulacro no usa credenciales de usuarios).
+- [x] **Login real** en la interfaz con un usuario existente — ✅ verificado por el RT el 2026-09-15.
 - [x] **Boot test** — ✅ `pm2 kill` → health 000 → `systemctl restart pm2-checkpointapp` → `online`, 0 restarts, health ok.
 - [x] **Estabilidad** — ✅ `restart_time` 0 → 0 tras 60 s.
 - [x] **Owner** — ✅ `find -not -user checkpointapp` → 0.
@@ -529,9 +528,9 @@ escribiendo a la vez**.
 | 09:17 | 7 | Verificación externa + control negativo | ✅ ver §8 | — |
 | 09:18 | 7 | Legibilidad biométrica | ✅ 2/2 descifrados | — |
 | 09:18 | — | Limpieza: dump y PGDATA temporal borrados; build local borrado | ✅ | — |
-| — | 7 | Login real con usuario | ⏳ pendiente (persona) | — |
+| tarde | 7 | Login real con usuario (RT) | ✅ | — |
+| ~17:10 | 10 | **Teardown** (PM2, unit, vhost, cert, `checkpoint_db`, rol, usuario, directorio, logs nginx) | ✅ drp sin rastros; hub y parse intactos | — |
 
-**Resultado: PASS.** Checkpoint **queda levantado en drp** (no se hizo teardown) para el login manual. Cuando
-ya no haga falta: §10.
+**Resultado: PASS.** Login real verificado y **teardown ejecutado el mismo día** — drp no conserva datos de Checkpoint.
 
 *Documento creado el 2026-09-15 durante el primer simulacro de Checkpoint.*

@@ -10,8 +10,8 @@
 > [ficha de alvera](./drp-fichas-apps-axioma.md#-alvera-ex-mediflow--prioridad-1) y al
 > [runbook general](./drp-recuperacion-axioma-en-drp.md).
 >
-> **Estado:** ✅ **EJECUTADO 2026-09-15 — PASS.** Alvera quedó sirviendo en
-> `https://alveradrp.axiomacloud.com`, reemplazando al simulacro del 2026-08-12 (nombres `mediflow`).
+> **Estado:** ✅ **EJECUTADO 2026-09-15 — PASS.** Alvera sirvió en `https://alveradrp.axiomacloud.com`,
+> reemplazando al simulacro del 2026-08-12 (nombres `mediflow`). Login + ficha verificados; **teardown el mismo día**.
 >
 > | Métrica | Valor medido |
 > |---|---|
@@ -374,7 +374,7 @@ rm /tmp/phi-check.js /tmp/phi-sample.sql
 - [x] Owner: `find /var/www/alvera -not -user alveraapp` → 0.
 - [x] Canales neutralizados (logs: email y Twilio "modo simulado"; `WHATSAPP_ENABLED=false`).
 - [x] Resto de drp intacto: hub, parse, checkpoint `online`, 0 restarts; 2129 MB disponibles.
-- [ ] **Login real y abrir una ficha de paciente** — pendiente, lo hace una persona.
+- [x] **Login real y abrir una ficha de paciente** — ✅ verificado por el RT el 2026-09-15: datos en claro.
 
 ---
 
@@ -435,9 +435,11 @@ Horas -03. Las de drp salen de sus logs (UTC −3).
 | 09:46:17 | 8 | `pm2 start --env production` | ✅ 2 instancias, health a los 8 s, 0 restarts tras 60 s | 8 s |
 | ~09:48 | 8–9 | systemd + boot test + verificación externa | ✅ ver §9.3 | — |
 | 09:49 | — | Estado final drp | ✅ 4 apps `online`, 0 restarts, 2129 MB disponibles | — |
-| — | 9.3 | Login real + ficha de paciente | ⏳ pendiente (persona) | — |
+| 16:48 | 7.1 | Adjuntos: restore **desde R2** (restic) sobre la copia de drp | ✅ 7/7 sha256 == producción | 5 s |
+| tarde | 9.3 | Login real + ficha de paciente (RT) | ✅ datos en claro | — |
+| ~17:10 | 10 | **Teardown** (PM2, unit, vhost, cert, `alvera_db`, rol, usuario, directorio, logs nginx) | ✅ drp sin rastros; hub y parse intactos | — |
 
-**Resultado: PASS.** Alvera **queda levantada en drp** para el login manual. Después: §10.
+**Resultado: PASS.** Login real y ficha de paciente verificados; **teardown ejecutado el mismo día** — drp no conserva datos de alvera.
 
 *Documento creado el 2026-09-15 durante el simulacro. Reemplaza como procedimiento ejecutado a las secciones
 de alvera del runbook general, que siguen valiendo como contexto.*
