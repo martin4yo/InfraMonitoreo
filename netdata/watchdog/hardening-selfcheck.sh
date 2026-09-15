@@ -31,6 +31,10 @@
 #   watchdog.self.drill_fresco    -> 1 si el restore drill corrió hace <40 días
 #   watchdog.self.drill_paso      -> 1 si el último restore drill dio PASS
 #                                    (ambas solo en el host ejecutor del drill)
+#   watchdog.self.adjuntos_fresco -> 1 si TODOS los backups de adjuntos a R2 declarados
+#                                    acá terminaron OK hace <1 h
+#   watchdog.self.adjuntos_integro-> 1 si el último `restic check` semanal dio PASS y
+#                                    tiene <8 días (ambas solo donde hay cron.d)
 #
 # Cada métrica de control vale 0 cuando el control está caído o la herramienta no
 # está instalada: en un server donde el control se da por puesto, "ausente" es
@@ -140,6 +144,35 @@ if [ -f /etc/cron.d/restore-drill ]; then
   fi
 fi
 
+# Backup de adjuntos a R2 (restic/adjuntos-backup.sh). Un cron.d por app lo declara
+# (/etc/cron.d/adjuntos-backup-<app>); el estado JSON es la prueba de que corrió.
+# Frescura por la última corrida OK, no por el último snapshot: con --skip-if-unchanged
+# una app sin adjuntos nuevos no genera snapshots y eso está bien.
+# 3600 s = 4 ciclos de 15 min: una corrida lenta no alarma, un cron muerto sí.
+adjuntos_fresco=1
+adjuntos_integro=1
+for decl in /etc/cron.d/adjuntos-backup-*; do
+  [ -f "$decl" ] || continue
+  app="${decl##*/adjuntos-backup-}"
+  st="/var/lib/adjuntos-backup/${app}.json"
+  if [ ! -f "$st" ]; then
+    adjuntos_fresco=0; adjuntos_integro=0   # declarado y nunca corrido
+    continue
+  fi
+  ts_ok=$(grep -o '"ts_ok": *[0-9]*' "$st" 2>/dev/null | grep -o '[0-9]*$')
+  if [ -z "$ts_ok" ] || [ $(( $(date +%s) - ts_ok )) -gt 3600 ]; then
+    adjuntos_fresco=0
+  fi
+  # 691200 s = 8 días: check semanal con un día de margen. Sin check todavía (primera
+  # semana) no se penaliza: el backup ya está cubierto por la frescura.
+  ts_check=$(grep -o '"ts_check": *[0-9]*' "$st" 2>/dev/null | grep -o '[0-9]*$')
+  if [ -n "$ts_check" ]; then
+    if [ $(( $(date +%s) - ts_check )) -gt 691200 ] || ! grep -q '"check": *"PASS"' "$st"; then
+      adjuntos_integro=0
+    fi
+  fi
+done
+
 # reboot pendiente: kernel/libc actualizados por unattended-upgrades pero sin activar.
 # NO es una regresión de hardening (no entra en 'ok'): es un recordatorio de que la
 # ventana de reinicio (C11 de G6) está pendiente. Alarma propia, de aviso.
@@ -162,8 +195,10 @@ send watchdog.self.reboot_pending  "$reboot_pending"
 send watchdog.self.colectores_backup "$colectores_backup"
 send watchdog.self.drill_fresco    "$drill_fresco"
 send watchdog.self.drill_paso      "$drill_paso"
+send watchdog.self.adjuntos_fresco "$adjuntos_fresco"
+send watchdog.self.adjuntos_integro "$adjuntos_integro"
 
-printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s colectores_backup=%s drill_fresco=%s drill_paso=%s\n' \
-  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending" "$colectores_backup" "$drill_fresco" "$drill_paso"
+printf 'ufw=%s ufw_enabled=%s fail2ban=%s sshd_nopassword=%s sshd_noroot=%s netdata_claimed=%s ok=%s reboot_pending=%s colectores_backup=%s drill_fresco=%s drill_paso=%s adjuntos_fresco=%s adjuntos_integro=%s\n' \
+  "$ufw_ok" "$ufw_enabled" "$f2b_ok" "$sshd_nopass" "$sshd_noroot" "$nd_ok" "$all_ok" "$reboot_pending" "$colectores_backup" "$drill_fresco" "$drill_paso" "$adjuntos_fresco" "$adjuntos_integro"
 
 [ "$all_ok" -eq 1 ] || exit 1

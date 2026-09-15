@@ -31,6 +31,7 @@
 | **C10** | **Revisión del inventario de secretos y rotación programada** | Semestral (inventario) · según [G7 §4](./g7-rotacion-secretos.md) (rotación) | RT | [G7](./g7-rotacion-secretos.md) | G7 §5 (registro de rotaciones) |
 | **C11** | **Ventana de reinicio de servidores** — activar kernels y `libc6` ya descargados | Mensual (o ante paquete que lo requiera) | RT | [G4](./g4-gestion-vulnerabilidades.md) · relevamiento 2026-08-09 | §4 · **alarma `watchdog_reboot_pendiente`** (selfcheck, avisa a las 24 h) desde 2026-09-03 |
 | **C12** | **Prueba de continuidad** — restaurar el kit desde los respaldos declarados, en equipo limpio | Semestral | **BT** (no el RT) | [G9 §6](./g9-continuidad-negocio.md) | §7 de este documento |
+| **C14** | **Backup de adjuntos a R2** — restic cada 15 min + `forget/prune` y `check` del 5 % semanal | Continua (automático) · mantenimiento dom 04:30 | automático en axioma (alvera) | Hallazgo A-5 2026-09-15 · [`backup-adjuntos.md`](../backup-adjuntos.md) | Netdata (`watchdog_adjuntos_*`) + `/var/lib/adjuntos-backup/` + C1 (restore) |
 | **C13** | **Verificación de integridad del repositorio** — `pgbackrest verify` (checksums de backups + WAL) en los 2 repos | **Semanal, una stanza por noche** (mar–sáb 05:00, automático) | automático en dev-1 | Hallazgo 2026-09-05 · [`pgbackrest-setup.md`](../pgbackrest-setup.md) | Netdata (`pgbackrest.verify_*`) + `/var/lib/pgbackrest-netdata/verify/` |
 
 ### 1.1 Anclaje del calendario

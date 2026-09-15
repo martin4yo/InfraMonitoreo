@@ -71,7 +71,7 @@
 | Base | pgBackRest `AxiomaCloudProd` en **R2** | ❌ |
 | `.env` backend | `infra-secrets` `env/axioma/alvera-backend.env` | ❌ |
 | `.env.production` frontend, vhost, ecosystem, unit | [`config/axioma/`](../config/axioma/) *(recapturados 2026-09-15)* | ❌ |
-| Adjuntos | dev-1 `/backup/alvera-adjuntos` (rsync diario 06:25) | ❌ — pero **sí de dev-1** (A-5) |
+| Adjuntos | **R2** (restic, cada 15 min — [backup-adjuntos.md](./backup-adjuntos.md)) · 2.ª copia: dev-1 (rsync diario) | ❌ |
 | Build | se compila **en drp** (Vite: 38 s, mín. 1063 MB libres) | ❌ |
 
 ---
@@ -261,9 +261,16 @@ sudo grep -o '"https://alveradrp.axiomacloud.com"' *.js | wc -l  # → 0  (sin /
 
 ---
 
-## 7. Adjuntos 💻 (dev-1 → drp, el operador hace de puente)
+## 7. Adjuntos
 
-drp no tiene acceso a dev-1. Si axioma no existe, el backup de dev-1 es la única copia:
+### 7.1 Desde R2 (restic) — **primera opción** desde 2026-09-15
+
+RPO 15 min y no depende de dev-1. Procedimiento y verificación: [backup-adjuntos.md §4](./backup-adjuntos.md#4-restore).
+Ejecutado sobre este simulacro el 2026-09-15: 7/7 sha256 == producción.
+
+### 7.2 Desde dev-1 (rsync diario) — si R2 no está disponible 💻
+
+drp no tiene acceso a dev-1; el operador hace de puente. RPO hasta 24 h:
 
 ```bash
 ssh dev-1 'sudo tar -C /backup/alvera-adjuntos -czf - .' | \
@@ -396,7 +403,7 @@ más de lo necesario** (el simulacro del 2026-08-12 quedó 34 días corriendo).
 | **A-2** | **axioma: el `.env` de SOPS apuntaba a `mediflowuser`/`mediflow_db`** (anterior al rename). Las claves de cifrado sí coincidían. | 🟠 | ✅ `infra-secrets` `e29ea3e`: renombrado a `alvera-backend.env`, 23/23 == vivo. |
 | **A-3** | **Los canales de notificación viven en la base.** Un restore trae WhatsApp (Evolution) habilitado con credenciales productivas; el backend tiene cron de recordatorios 09:00 y alertas 07:30. Un simulacro sin §3.3 mensajea a pacientes reales. El drill del 2026-08-12 corrió **34 días con `WHATSAPP_ENABLED=true`** — sin evidencia de envíos (su código no tenía aún el cron de recordatorios y los logs no muestran envíos). | 🔴 | ✅ Mitigado en el procedimiento (§0.3, §3.3). Mejora de fondo sugerida: un flag de entorno (`NOTIFICATIONS_DISABLED`) que la app respete antes que la base. |
 | **A-4** | **El rate limit de login no protege la ruta que usa el frontend.** `limit_req zone=alvera_login` (5/min) está solo en el server `api.alvera.axiomacloud.com` (sin DNS); el frontend llama a `alvera.axiomacloud.com/api/auth/login`, que solo tiene el límite general (30/s). Verificado en la réplica de drp: 7 intentos seguidos → 7×401, ningún 429. | 🟠 | **Abierto** — agregar en el server del frontend de axioma `location ~* ^/api/(auth/login|users/login)` con `alvera_login`. Toca producción: requiere OK y ventana. |
-| **A-5** | **Los adjuntos solo se respaldan en dev-1** (rsync diario 06:25). No hay copia off-site ni en R2, RPO 24 h. Si caen axioma **y** dev-1, se pierden. Además el destino quedó `755` (el script dice `700`) y son documentos de salud. | 🟡 | **Abierto** — misma política propuesta para Checkpoint ([§9](./drp-checkpoint-en-drp.md#9-política-de-backup-de-los-uploads-propuesta)): restic → R2 cada 15 min; `chmod 700` el destino en dev-1. |
+| **A-5** | **Los adjuntos solo se respaldaban en dev-1** (rsync diario 06:25): sin copia off-site, RPO 24 h. Si caían axioma **y** dev-1, se perdían. Además el destino quedó `755` (el script dice `700`) y son documentos de salud. | 🟡 | ✅ **Resuelto 2026-09-15:** restic → R2 cada 15 min en axioma ([backup-adjuntos.md](./backup-adjuntos.md)), restore desde R2 verificado 7/7 sha256. El rsync a dev-1 sigue como segunda copia. **Pendiente:** `chmod 700` del destino en dev-1. |
 | **A-6** | **`VITE_API_URL` sin `/api` rompe el login en silencio**, y el chequeo del runbook general (`localhost:5000` → 0) no lo detecta: esa cadena aparece siempre como fallback inerte. En el simulacro se compiló primero sin `/api` (error del operador al relevar con un `sed` que recortaba la ruta) y se detectó comparando el bundle contra producción. | 🟡 | ✅ Chequeo corregido (§6); comentario en `alvera-frontend.env.production`. |
 | **A-7** | **El backend escucha en `*:5300`**, no en loopback, en axioma y en drp (PM2 cluster ignora `HOST`). Hoy lo cierra ufw (verificado desde afuera). | 🟢 | Informativo — depende de un solo control (el firewall). |
 | **A-8** | **`config/axioma/` desactualizado para alvera**: ecosystem, vhost, unit y frontend-env seguían con nombres/rutas `mediflow`. | 🟢 | ✅ Recapturados del vivo 2026-09-15 con nombres `alvera` (sin secretos). |
