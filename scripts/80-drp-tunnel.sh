@@ -19,7 +19,10 @@ DRP_USER="${DRP_USER:-axiomacloud}"
 DRP_PORT="${DRP_PORT:-22}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
 LOCAL_PORT_TLS="${LOCAL_PORT_TLS:-8443}"
-APPS=(hub-drill.local)
+# 2026-09-15: sin apps. hub-drill y parse-drill se desmontaron (programa de simulacros, 48 h máx.) y los
+# simulacros nuevos se prueban por internet con dominio y cert reales. Agregar acá solo si un simulacro
+# vuelve a necesitar túnel.
+APPS=()
 
 C_OK=$'\e[32m'; C_WARN=$'\e[33m'; C_ERR=$'\e[31m'; C_DIM=$'\e[2m'; C_0=$'\e[0m'
 ok(){ echo "${C_OK}✔${C_0} $*"; }
@@ -80,6 +83,7 @@ fi
 echo
 echo "Aplicaciones recuperadas en axioma-drp:"
 fallos=0
+(( ${#APPS[@]} )) || warn "No hay apps de simulacro declaradas en APPS (ver comentario arriba)."
 for app in "${APPS[@]}"; do
     # alvera exige HTTPS: su cookie de sesion sale con flag Secure (NODE_ENV=production)
     if [[ "$app" == alvera-* ]]; then

@@ -87,9 +87,9 @@ Para que las cadencias no dependan de la memoria, se anclan a fechas fijas:
 
 | Ventana | Fecha | Nivel | App | Origen → destino | RPO / RTO medidos | Login real | Teardown | Resultado | Evidencia |
 |---|---|---|---|---|---|---|---|---|---|
-| (previo a C15) | 2026-08-12 | 2 | hub | axioma → drp | — | ✅ | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
-| (previo a C15) | 2026-08-12 | 2 | parse | axioma → drp | — | — | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
-| (previo a C15) | 2026-08-12 | 2 | alvera (mediflow) | axioma → drp | — | ✅ | ❌ **olvidado 34 días** | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (previo a C15) | 2026-08-12 | 2 | hub | axioma → drp | — | ✅ | ❌ **olvidado 34 días** → eliminado 2026-09-15 | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (previo a C15) | 2026-08-12 | 2 | parse | axioma → drp | — | — | ❌ **olvidado 34 días** → eliminado 2026-09-15 | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
+| (previo a C15) | 2026-08-12 | 2 | alvera (mediflow) | axioma → drp | — | ✅ | ❌ **olvidado 34 días** → eliminado 2026-09-15 | ✅ PASS | [ficha](../drp-fichas-apps-axioma.md) |
 | (fuera de ciclo) | **2026-09-15** | 2 | **checkpoint** | dev-1 → drp | ≈ 2 min / ≈ 20 min | ✅ | ✅ mismo día | ✅ PASS | [runbook](../drp-checkpoint-en-drp.md) · [informe](../informes/2026-09-15-checkpoint.md) |
 | (fuera de ciclo) | **2026-09-15** | 2 | **alvera** | axioma → drp | ≈ 0 / 13 min | ✅ + ficha | ✅ mismo día | ✅ PASS | [runbook](../drp-alvera-en-drp.md) · [informe](../informes/2026-09-15-alvera.md) |
 | **2026-10** | _pendiente_ | 2 | clubix · mini · tally | — | — | — | — | ⬜ | — |
