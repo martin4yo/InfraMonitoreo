@@ -37,6 +37,14 @@
 > nota vieja *"la infra dice mediflow, buscá mediflow"* quedó **obsoleta** — hoy es al revés. `mediflow_db`
 > y `/var/www/mediflow` **ya no existen** en axioma ni en dev-1. Ver el registro del cambio abajo.
 
+> ✅ **Simulacro 2026-09-15 — PASS, con nombres `alvera`.** Procedimiento ejecutado paso a paso y vigente:
+> **[drp-alvera-en-drp.md](./drp-alvera-en-drp.md)**. RPO ≈ 0, RTO de manos ≈ 13 min, **2993/2993 valores PHI
+> descifrados**, adjuntos 6/6. Reemplazó en drp al simulacro del 08-12 (nombres `mediflow`, ya desmontado).
+> Lo nuevo que hay que saber: **los canales de WhatsApp/email viven en la base** y un simulacro sin
+> neutralizarlos mensajea a pacientes (A-3); **`VITE_API_URL` lleva `/api`** (A-6); el `.env` en
+> infra-secrets es ahora **`env/axioma/alvera-backend.env`** (A-2); el repo ya tiene el ecosystem correcto
+> (`f36c138` == axioma). Lo que sigue abajo es el registro del 08-12.
+
 | | |
 |---|---|
 | **Path** | `/var/www/alvera` (backend en `/backend`, frontend en `/frontend`) |
@@ -138,8 +146,9 @@ porque solo una es un problema real:
   lo compiló**. Si mañana hay que recompilar, nadie sabe con qué valor.
 - **Y el modo de falla es traicionero:** la app carga, se ve perfecta, y falla **recién en el login**.
 
-> **Acción: crear `mediflow-frontend.env` en `infra-secrets`** con el `VITE_API_URL` real de producción.
-> Es el equivalente, para el frontend, de lo que `config/axioma/pm2/` resolvió para el backend.
+> ~~**Acción: crear `mediflow-frontend.env` en `infra-secrets`**~~ — ✅ **resuelto** en
+> [`config/axioma/frontend-env/alvera-frontend.env.production`](../config/axioma/frontend-env/) (no es secreto:
+> queda horneado en el JS). ⚠️ El valor es `https://alvera.axiomacloud.com/api` — **con `/api`**.
 
 **(2) y (3) no ocurrirían en un DR real**: con el DNS movido, el dominio sería
 `alvera.axiomacloud.com` —ya presente en `ALLOWED_ORIGINS`— y el certificado sería válido, así que la

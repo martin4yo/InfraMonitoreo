@@ -5,13 +5,13 @@ After=network.target
 
 [Service]
 Type=forking
-User=mediflowapp
+User=alveraapp
 LimitNOFILE=infinity
 LimitNPROC=infinity
 LimitCORE=infinity
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/usr/bin:/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-Environment=PM2_HOME=/home/mediflowapp/.pm2
-PIDFile=/home/mediflowapp/.pm2/pm2.pid
+Environment=PM2_HOME=/home/alveraapp/.pm2
+PIDFile=/home/alveraapp/.pm2/pm2.pid
 Restart=on-failure
 
 ExecStart=/usr/lib/node_modules/pm2/bin/pm2 resurrect

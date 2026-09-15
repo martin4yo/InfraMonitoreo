@@ -5,7 +5,7 @@ descarga cualquier usuario— pero **sin ellas el build sale mal y la app falla 
 
 | App | Archivo | Destino en el server |
 |---|---|---|
-| alvera (mediflow) | `mediflow-frontend.env.production` | `/var/www/mediflow/frontend/.env.production` |
+| alvera | `alvera-frontend.env.production` | `/var/www/alvera/frontend/.env.production` |
 
 ## Por qué están acá y no en el repo de cada app
 
@@ -16,7 +16,7 @@ de producción termina existiendo en un solo lugar: el servidor. Que es exactame
 ## Uso en una recuperación
 
 ```bash
-cp mediflow-frontend.env.production /var/www/mediflow/frontend/.env.production
+cp alvera-frontend.env.production /var/www/alvera/frontend/.env.production
 cd /var/www/mediflow/frontend && npm run build      # Vite lo lee solo
 ```
 

@@ -19,7 +19,7 @@ DRP_USER="${DRP_USER:-axiomacloud}"
 DRP_PORT="${DRP_PORT:-22}"
 LOCAL_PORT="${LOCAL_PORT:-8080}"
 LOCAL_PORT_TLS="${LOCAL_PORT_TLS:-8443}"
-APPS=(hub-drill.local alvera-drill.local)
+APPS=(hub-drill.local)
 
 C_OK=$'\e[32m'; C_WARN=$'\e[33m'; C_ERR=$'\e[31m'; C_DIM=$'\e[2m'; C_0=$'\e[0m'
 ok(){ echo "${C_OK}✔${C_0} $*"; }
@@ -110,10 +110,9 @@ else
 fi
 echo "Abrí en el navegador:"
 echo "    http://hub-drill.local:${LOCAL_PORT}"
-echo "    https://alvera-drill.local:${LOCAL_PORT_TLS}   ${C_DIM}(certificado autofirmado: el navegador va a advertir)${C_0}"
 echo
-info "alvera SOLO funciona por HTTPS: su cookie de sesion sale con flag Secure"
-info "y el navegador la descarta sobre http://. No es un fallo: es la app protegiendose."
+info "alvera y checkpoint ya NO van por túnel: desde 2026-09-15 se prueban por internet"
+info "con dominio y cert reales (alveradrp / checkpointdrp.axiomacloud.com)."
 echo
 info "Para bajarlo:  $0 --stop"
 
