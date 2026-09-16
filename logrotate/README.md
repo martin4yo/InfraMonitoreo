@@ -6,7 +6,7 @@ de cada server. Resuelven el crecimiento sin control de los logs de PM2
 
 | Archivo | Server | Notas |
 |---|---|---|
-| `pm2-axioma` | axioma | mini **excluido** (bloque comentado, ver abajo) |
+| `pm2-axioma` | axioma | **8 bloques, 55 archivos** (actualizado 2026-09-16). mini: solo `/var/log/mini`, el resto **excluido** (ver abajo) |
 | `pm2-dev-1` | dev-1 | incluye `/var/log/mini` |
 | `pm2-clubix` | clubix | |
 | `pm2-axiodemo` | axiodemo | |
@@ -113,6 +113,24 @@ sudo ps -eo args | grep "[p]gbackrest"
 
 Referencia de costo: copiar 2,07 GB tardó **59 s** y no afectó a las apps.
 
+## Actualización 2026-09-16 — la convención no alcanzaba
+
+El `backend-error.log` de **parse** llegó a **13,6 GB** (25 % del disco de axioma) sin que
+nada lo rotara: parse escribe en `/var/www/parse/*/logs/` y su `PM2_HOME` es
+`/var/www/parse/.pm2`, así que ningún glob de `~/.pm2/logs` lo tocaba. Lo mismo pasaba con
+hub, elore y tally (`/var/log/<app>/`).
+
+**Regla nueva:** las rutas salen de `pm2 jlist` de **cada** usuario (`pm_out_log_path` /
+`pm_err_log_path`), no de la convención. Para relevarlas:
+
+```bash
+for u in <usuarios>; do sudo -u $u env PM2_HOME=<su PM2_HOME> pm2 jlist \
+  | python3 -c 'import json,sys;[print(p["name"],p["pm2_env"].get("pm_out_log_path"),p["pm2_env"].get("pm_err_log_path")) for p in json.load(sys.stdin)]'; done
+```
+
+Se agregó `maxsize 200M` a todos los bloques: `daily` sola deja que un log que crece rápido
+llegue a la medianoche con cualquier tamaño.
+
 ## Pendiente — mini en axioma
 
 El bloque de `/home/miniapp/.pm2/logs/` en `pm2-axioma` está **comentado a propósito**.
@@ -123,5 +141,11 @@ de Gmail— volcadas por tres `console.log` de la app
 (`src/middleware/validateRequest.ts:7` y `:9`, `src/routes/tenants.ts:154`).
 
 El archivo es la evidencia del alcance de esa exposición. **No rotar hasta que el
-usuario termine de rotar esas credenciales.** Para activarlo: descomentar el
+usuario termine de rotar esas credenciales.**
+
+⚠️ **2026-09-16:** al ampliar la cobertura se incluyó mini por error y se corrigió antes de
+la primera rotación (nada de mini llegó a rotarse). Se sumó a la exclusión
+`/var/www/mini/logs/*.log`: `combined.log` tiene **1129** coincidencias de `token` y 3 de
+`password` en una muestra de 5 MB. La exclusión ahora está escrita **dentro del propio
+`pm2-axioma`**, no solo acá. Para activarlo: descomentar el
 bloque y correr `logrotate -d` antes de aplicar.
